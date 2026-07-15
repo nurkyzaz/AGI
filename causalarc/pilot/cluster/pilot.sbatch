@@ -13,12 +13,13 @@
 # Aggregate afterward with gate1.py.
 set -euo pipefail
 
-GROUPS=("F1_translate,F2_recolor_parity" \
-        "F3_reflect,F4_gravity" \
-        "F5_shortcut,F6_rotate" \
-        "F7_recolor_size,F8_diag" \
-        "F9_colormap,F10_recolor_half")
-PAIR=${GROUPS[$SLURM_ARRAY_TASK_ID]}
+# NB: do not name this array GROUPS -- that is a bash special read-only variable.
+FAM_PAIRS=("F1_translate,F2_recolor_parity" \
+           "F3_reflect,F4_gravity" \
+           "F5_shortcut,F6_rotate" \
+           "F7_recolor_size,F8_diag" \
+           "F9_colormap,F10_recolor_half")
+PAIR=${FAM_PAIRS[$SLURM_ARRAY_TASK_ID]}
 
 RUN=/home/user/nurkyz/agi/causalarc/pilot/cluster/run.sh
 echo "host=$(hostname) families=$PAIR start=$(date)"

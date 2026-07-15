@@ -1,5 +1,36 @@
 # Phase 1 Pre-Registration (P1.4)
 
+## v2 amendment (B-1.1 repair loop) — frozen 2026-07-15, after the v1 GATE 1 result
+
+The v1 run (400 runs, SLURM 48067) returned: item 1 PASS (raw gap 0.268,
+CI [0.12, 0.44], 100% families), item 2 PASS (oracle−raw shifted 0.453,
+CI [0.25, 0.66]), **item 3 FAIL** (causal-probe cross-seed std 0.144; 0.132
+after the pre-registered oracle<0.50 exclusion of F4_gravity, F6_rotate).
+That verdict stands and is logged (LOG.md, `runs_causalarc/20260715-145732_gate1.jsonl`).
+
+Two repairs, both fixed before any v2 data is seen; **all thresholds unchanged**:
+
+1. **Capacity (fixes the excluded families):** decoder 1→2 attention blocks,
+   hidden 48→64, steps 3000→4000, applied uniformly to all families and all
+   baselines. Gate to proceed: a smoke run must show oracle iid ≥ 0.50 on
+   F4_gravity and F6_rotate; if not, those two families are *replaced* and the
+   replacements must pass GATE 0 before the wave launches.
+2. **Causal-score estimator (fixes measurement noise, not the quantity):**
+   probe_n 512→2048, single 50/50 split → 5-fold CV averaged over 3 probe
+   seeds. Chosen for measurement quality only; no outcome of any probe was
+   consulted in choosing these numbers.
+
+Decision rule: GATE 1 v2 = the same three items, same thresholds, same
+family-cluster bootstrap, same exclusion rule, evaluated on the full v2 re-run
+(10 families × 10 seeds × 4 baselines). No further estimator or threshold
+changes are permitted after this freeze; a second item-3 failure on the v2 run
+is a *finding* (the causal-probe metric on raw models is genuinely seed-unstable
+— report it and take the plan's guidance on which score to carry into Phase 2).
+
+---
+
+## v1 (original) — superseded by the amendment above, kept verbatim for the record
+
 **Frozen: 2026-07-15, before observing any iid/shifted accuracy or OOD-gap result.**
 At freeze time the only pilot output seen was that the oracle's rule code linearly
 encodes C (causal-probe ≈ 1.0) — a wiring sanity check, not a hypothesis test.

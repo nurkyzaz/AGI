@@ -73,7 +73,7 @@ def main() -> None:
     ap.add_argument("--families", default="ALL")
     ap.add_argument("--seeds", default="0-9")
     ap.add_argument("--kinds", default=",".join(KINDS))
-    ap.add_argument("--steps", type=int, default=3000)
+    ap.add_argument("--steps", type=int, default=4000)
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--device", default="auto")
     ap.add_argument("--tag", default="")

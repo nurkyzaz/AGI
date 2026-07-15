@@ -263,7 +263,55 @@ class ReflectByAxis(Family):
 
 
 # --------------------------------------------------------------------------
-# F4 — GravityDrop
+# F4 — CycleShift (replacement, B-1.1 v2 2026-07-15)
+# --------------------------------------------------------------------------
+
+class CycleShift(Family):
+    """Cyclic (wrap-around) whole-grid shift. Replaces F4_gravity in the pilot
+    registry: gravity is per-column content *sorting* — not a fixed spatial
+    permutation — and the v2 oracle still could not fit it exactly (0.22 < 0.50
+    gate; cell acc 0.988), so per PREREGISTRATION v2 the family is replaced.
+    A cyclic shift IS a fixed permutation per (direction, step), mechanistically
+    distinct from F1's clip-translate, and keeps the geometric/recolor balance.
+    GravityDrop stays in the codebase for the record and as a future
+    hard-family candidate; it is no longer registered.
+    """
+
+    name = "F4_cycle"
+    _dirs = ("up", "down", "left", "right")
+    _steps = (1, 2)
+
+    def ledger(self) -> CausalLedger:
+        return CausalLedger(
+            family=self.name,
+            variables=(
+                Variable("direction", Role.C, self._dirs, "cyclic shift direction"),
+                Variable("step", Role.C, self._steps, "cyclic shift magnitude"),
+                *_NUISANCE_VARS,
+            ),
+            reference_rule="output = roll(signal, step, direction) (wrap-around)",
+            rule_type="geometric",
+        )
+
+    def sample_latents(self, rng):
+        return {
+            "direction": str(rng.choice(self._dirs)),
+            "step": int(rng.choice(self._steps)),
+            **_sample_nuisance(rng),
+        }
+
+    def render(self, latents, content_seed):
+        color = 1 + (content_seed % 8)
+        signal = _draw_signal(content_seed, color)
+        d, s = str(latents["direction"]), int(latents["step"])
+        shift = {"up": (-s, 0), "down": (s, 0), "left": (0, -s), "right": (0, s)}[d]
+        output = np.roll(signal, shift, axis=(0, 1)).copy()
+        inp = _compose_input(signal, latents, content_seed)
+        return inp, output
+
+
+# --------------------------------------------------------------------------
+# GravityDrop — UNREGISTERED (kept for the record; see CycleShift docstring)
 # --------------------------------------------------------------------------
 
 class GravityDrop(Family):
@@ -594,7 +642,7 @@ FAMILIES: Dict[str, Family] = {
         TranslateObject(),
         RecolorByParity(),
         ReflectByAxis(),
-        GravityDrop(),
+        CycleShift(),
         ShortcutRecolor(),
         Rotate90(),
         RecolorBySize(),

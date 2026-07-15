@@ -6,6 +6,24 @@ edited. Every gate evaluation also has an immutable JSONL record in
 
 ---
 
+## 2026-07-15 — B-1.1 repair executed; v2 wave launched (SLURM 48093).
+
+**Capacity fix validated by smoke (gate: oracle iid >= 0.50):** F6_rotate
+0.18 -> 0.89 PASS with the deeper decoder (2 attention blocks, hidden 64,
+4000 steps; F1 control 1.00). **F4_gravity failed its gate** (0.03 -> 0.22,
+cell 0.988): gravity is per-column content *sorting*, not a fixed spatial
+permutation — one more attention hop wasn't enough for exact-match. Per the
+frozen prereg v2 rule the family is REPLACED, not retuned: **F4_cycle**
+(cyclic whole-grid shift; C = direction x step; a fixed permutation the
+architecture can express). GravityDrop stays in code, unregistered, as a
+future hard-family candidate. F4_cycle passed GATE 0 in full
+(record 20260715-151238, mask P=R=1.0) and its oracle smoke hit 1.00.
+
+**Probe estimator v2:** probe_n 512->2048, 5-fold CV x 3 probe seeds.
+Thresholds unchanged (prereg v2). v2 wave = 10 families x 10 seeds x 4
+baselines, tag pilot2, array 48093. A second item-3 failure will be reported
+as a finding, not looped again.
+
 ## 2026-07-15 — GATE 1: FAIL (item 3), items 1–2 PASS decisively. Branch: B-1.1 repair.
 
 **Pilot:** 400 runs (10 families × 10 seeds × 4 baselines), SLURM array 48067

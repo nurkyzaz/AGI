@@ -97,23 +97,22 @@ class Decoder(nn.Module):
     """Apply rule code z to the query input, produce output logits.
 
     A local conv stack cannot move pixels across the whole grid (needed for
-    reflect / rotate / translate), so after FiLM-conditioning on z we add one
-    global self-attention layer over the H*W cells (with learned positional
-    embeddings). That gives the decoder a global receptive field at trivial cost
-    on a 12x12 grid, so geometric transforms become learnable."""
+    reflect / rotate / translate / gravity), so after FiLM-conditioning on z we
+    add `n_blocks` global self-attention blocks over the H*W cells (with learned
+    positional embeddings). Repair v2 (B-1.1, 2026-07-15): n_blocks 1->2 and
+    hidden 48->64 because the v1 oracle could not fit rot90 (0.18) or gravity
+    (0.03) — a single attention hop cannot both gather a column's contents and
+    re-place them; two hops can."""
 
-    def __init__(self, z_dim: int = 64, hidden: int = 48, max_hw: int = 16 * 16):
+    def __init__(self, z_dim: int = 64, hidden: int = 64, max_hw: int = 16 * 16,
+                 n_blocks: int = 2):
         super().__init__()
         self.hidden = hidden
         self.conv = _ConvStack(N_COLORS, hidden)
         self.film = nn.Linear(z_dim, 2 * hidden)
         self.pos = nn.Parameter(torch.zeros(1, max_hw, hidden))
         nn.init.normal_(self.pos, std=0.02)
-        self.attn = nn.MultiheadAttention(hidden, num_heads=4, batch_first=True)
-        self.norm = nn.LayerNorm(hidden)
-        self.ffn = nn.Sequential(nn.Linear(hidden, 2 * hidden), nn.ReLU(),
-                                 nn.Linear(2 * hidden, hidden))
-        self.norm2 = nn.LayerNorm(hidden)
+        self.blocks = nn.ModuleList([_AttnBlock(hidden) for _ in range(n_blocks)])
         self.head = nn.Conv2d(hidden, N_COLORS, 1)
 
     def forward(self, query_in, z):
@@ -123,11 +122,25 @@ class Decoder(nn.Module):
         h = F.relu(h * gamma[..., None, None] + beta[..., None, None])
         t = h.flatten(2).transpose(1, 2)                  # (B, H*W, hidden)
         t = t + self.pos[:, : H * W]
-        a, _ = self.attn(t, t, t)
-        t = self.norm(t + a)
-        t = self.norm2(t + self.ffn(t))
+        for blk in self.blocks:
+            t = blk(t)
         h = t.transpose(1, 2).reshape(B, self.hidden, H, W)
         return self.head(h)                                # (B, N_COLORS, H, W)
+
+
+class _AttnBlock(nn.Module):
+    def __init__(self, hidden: int):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(hidden, num_heads=4, batch_first=True)
+        self.norm = nn.LayerNorm(hidden)
+        self.ffn = nn.Sequential(nn.Linear(hidden, 2 * hidden), nn.ReLU(),
+                                 nn.Linear(2 * hidden, hidden))
+        self.norm2 = nn.LayerNorm(hidden)
+
+    def forward(self, t):
+        a, _ = self.attn(t, t, t)
+        t = self.norm(t + a)
+        return self.norm2(t + self.ffn(t))
 
 
 class BaselineModel(nn.Module):

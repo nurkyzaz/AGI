@@ -25,15 +25,17 @@ from .models import Batch, BaselineModel
 @dataclass
 class PilotConfig:
     k: int = 3
-    steps: int = 1500
+    steps: int = 4000           # v2: 3000->4000 (F4/F6 oracle could not fit at v1 budget)
     batch: int = 64
     lr: float = 2e-3
     z_dim: int = 64
-    hidden: int = 48
+    hidden: int = 64            # v2: 48->64 (same reason)
     beta: float = 1e-2          # cond-IB KL weight
     eval_n: int = 256
-    probe_n: int = 512
+    probe_n: int = 2048         # v2: 512->2048 (probe estimator was under-sampled)
     probe_steps: int = 300
+    probe_folds: int = 5        # v2: single 50/50 split -> 5-fold CV
+    probe_seeds: int = 3        # v2: average over probe seeds (fold shuffles + init)
     device: str = "auto"
 
 
@@ -94,19 +96,36 @@ def evaluate(model, family, rng, cfg, split: str, device) -> Dict[str, float]:
             "cell": _cell_acc(logits, b.query_out)}
 
 
-def _linear_probe(Z: torch.Tensor, y: torch.Tensor, n_classes: int, steps: int, device) -> float:
-    """Fit a linear classifier Z->y, return held-out accuracy (50/50 split)."""
-    n = Z.shape[0]; ntr = n // 2
-    clf = torch.nn.Linear(Z.shape[1], n_classes).to(device)
+def _fit_probe(Ztr, ytr, Zte, yte, n_classes: int, steps: int, device) -> float:
+    clf = torch.nn.Linear(Ztr.shape[1], n_classes).to(device)
     opt = torch.optim.Adam(clf.parameters(), lr=1e-2)
-    Ztr, ytr = Z[:ntr], y[:ntr]
     for _ in range(steps):
         opt.zero_grad()
         loss = F.cross_entropy(clf(Ztr), ytr)
         loss.backward(); opt.step()
     with torch.no_grad():
-        acc = (clf(Z[ntr:]).argmax(1) == y[ntr:]).float().mean().item()
-    return acc
+        return (clf(Zte).argmax(1) == yte).float().mean().item()
+
+
+def _linear_probe(Z: torch.Tensor, y: torch.Tensor, n_classes: int, steps: int, device,
+                  folds: int = 5, probe_seeds: int = 3) -> float:
+    """Cross-validated linear probe accuracy Z->y.
+
+    v2 estimator (B-1.1 repair): k-fold CV averaged over several probe seeds
+    (each seed reshuffles the folds and reinitializes the classifier). The v1
+    single 50/50 split was itself a large noise source in the cross-seed
+    stability metric; this measures the same quantity with less variance."""
+    n = Z.shape[0]
+    accs = []
+    for ps in range(probe_seeds):
+        g = torch.Generator().manual_seed(ps)
+        perm = torch.randperm(n, generator=g).to(Z.device)
+        for f in range(folds):
+            lo, hi = f * n // folds, (f + 1) * n // folds
+            te = perm[lo:hi]
+            tr = torch.cat([perm[:lo], perm[hi:]])
+            accs.append(_fit_probe(Z[tr], y[tr], Z[te], y[te], n_classes, steps, device))
+    return float(np.mean(accs))
 
 
 @torch.no_grad()
@@ -127,13 +146,15 @@ def probe_causal_score(model, family, rng, cfg, device) -> Dict[str, float]:
     c_accs = []
     for j, card in enumerate(cards):
         y = torch.tensor(c_codes[:, j], dtype=torch.long, device=device)
-        c_accs.append(_linear_probe(z, y, card, cfg.probe_steps, device))
+        c_accs.append(_linear_probe(z, y, card, cfg.probe_steps, device,
+                                    folds=cfg.probe_folds, probe_seeds=cfg.probe_seeds))
     u_accs = []
     for j, (_, dom) in enumerate(nuisance_spec(family)):
         y = torch.tensor(u_codes[:, j], dtype=torch.long, device=device)
         if len(torch.unique(y)) < 2:
             continue
-        u_accs.append(_linear_probe(z, y, len(dom), cfg.probe_steps, device))
+        u_accs.append(_linear_probe(z, y, len(dom), cfg.probe_steps, device,
+                                    folds=cfg.probe_folds, probe_seeds=cfg.probe_seeds))
     return {
         "causal_probe": float(np.mean(c_accs)) if c_accs else 0.0,
         "nuisance_probe": float(np.mean(u_accs)) if u_accs else 0.0,

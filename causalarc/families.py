@@ -45,8 +45,12 @@ def _rng(content_seed: int) -> np.random.Generator:
     return np.random.default_rng(content_seed)
 
 
-def _random_polyomino(rng: np.random.Generator, n_cells: int) -> Set[Tuple[int, int]]:
-    """Random connected set of `n_cells` cells via random growth from origin."""
+# Largest object bounding box that still fits inside the canvas with margins on
+# all sides (the placement offset must have room: CANVAS - 2*MARGIN).
+MAX_EXTENT = CANVAS - 2 * MARGIN
+
+
+def _grow_polyomino(rng: np.random.Generator, n_cells: int) -> Set[Tuple[int, int]]:
     cells: Set[Tuple[int, int]] = {(0, 0)}
     frontier = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     while len(cells) < n_cells:
@@ -64,10 +68,22 @@ def _random_polyomino(rng: np.random.Generator, n_cells: int) -> Set[Tuple[int, 
             break
         if not grew:  # pragma: no cover - frontier always has room here
             break
-    # normalize so min row/col is 0
     rs = min(r for r, _ in cells)
     cs = min(c for _, c in cells)
     return {(r - rs, c - cs) for r, c in cells}
+
+
+def _random_polyomino(rng: np.random.Generator, n_cells: int) -> Set[Tuple[int, int]]:
+    """Random connected set of `n_cells` cells whose bounding box fits within
+    MAX_EXTENT on both axes (so it is always placeable with margins). Resamples
+    compact blobs; the growth process rarely exceeds the bound, so this is cheap."""
+    for _ in range(200):
+        cells = _grow_polyomino(rng, n_cells)
+        h = max(r for r, _ in cells) + 1
+        w = max(c for _, c in cells) + 1
+        if h <= MAX_EXTENT and w <= MAX_EXTENT:
+            return cells
+    return cells  # pragma: no cover - fallback (should not trigger for n<=8)
 
 
 def _blit(canvas: Grid, cells: Set[Tuple[int, int]], top: int, left: int, color: int) -> None:
@@ -394,6 +410,183 @@ class ShortcutRecolor(Family):
         return inp, output
 
 
+# --------------------------------------------------------------------------
+# F6 — Rotate90  (geometric)
+# --------------------------------------------------------------------------
+
+class Rotate90(ReflectByAxis):
+    name = "F6_rotate"
+    _ks = (1, 2, 3)  # quarter-turns
+
+    def ledger(self) -> CausalLedger:
+        return CausalLedger(
+            family=self.name,
+            variables=(
+                Variable("k", Role.C, self._ks, "number of 90-degree rotations"),
+                *_NUISANCE_VARS,
+            ),
+            reference_rule="output = rot90(signal, k)",
+            rule_type="geometric",
+        )
+
+    def sample_latents(self, rng):
+        return {"k": int(rng.choice(self._ks)), **_sample_nuisance(rng)}
+
+    def render(self, latents, content_seed):
+        signal = self._asymmetric_signal(content_seed)  # square canvas -> rot stays in-shape
+        output = np.rot90(signal, int(latents["k"])).copy()
+        inp = _compose_input(signal, latents, content_seed)
+        return inp, output
+
+
+# --------------------------------------------------------------------------
+# F7 — RecolorBySize  (recolor)
+# --------------------------------------------------------------------------
+
+class RecolorBySize(Family):
+    name = "F7_recolor_size"
+    _colors = (1, 2, 3, 4, 6, 7, 8, 9)
+    _marker = 5
+    _threshold = 5  # >= threshold cells => "big"
+
+    def ledger(self) -> CausalLedger:
+        return CausalLedger(
+            family=self.name,
+            variables=(
+                Variable("color_small", Role.C, self._colors, "output color when object is small"),
+                Variable("color_big", Role.C, self._colors, "output color when object is big"),
+                *_NUISANCE_VARS,
+            ),
+            reference_rule="output = recolor(signal, color_big if |cells|>=5 else color_small)",
+            rule_type="recolor",
+        )
+
+    def sample_latents(self, rng):
+        cs, cb = rng.choice(self._colors, size=2, replace=False)
+        return {"color_small": int(cs), "color_big": int(cb), **_sample_nuisance(rng)}
+
+    def render(self, latents, content_seed):
+        signal = _draw_signal(content_seed, self._marker, n_cells_range=(3, 8))
+        n = int((signal == self._marker).sum())
+        target = int(latents["color_big"]) if n >= self._threshold else int(latents["color_small"])
+        output = signal.copy()
+        output[signal == self._marker] = target
+        inp = _compose_input(signal, latents, content_seed)
+        return inp, output
+
+
+# --------------------------------------------------------------------------
+# F8 — TranslateDiagonal  (geometric)
+# --------------------------------------------------------------------------
+
+class TranslateDiagonal(Family):
+    name = "F8_diag"
+    _steps = (-2, -1, 1, 2)
+
+    def ledger(self) -> CausalLedger:
+        return CausalLedger(
+            family=self.name,
+            variables=(
+                Variable("step", Role.C, self._steps, "diagonal shift (both axes by step)"),
+                *_NUISANCE_VARS,
+            ),
+            reference_rule="output = translate(signal, step, step)",
+            rule_type="geometric",
+        )
+
+    def sample_latents(self, rng):
+        return {"step": int(rng.choice(self._steps)), **_sample_nuisance(rng)}
+
+    def render(self, latents, content_seed):
+        color = 1 + (content_seed % 8)
+        signal = _draw_signal(content_seed, color)
+        s = int(latents["step"])
+        output = translate(signal, s, s)
+        inp = _compose_input(signal, latents, content_seed)
+        return inp, output
+
+
+# --------------------------------------------------------------------------
+# F9 — ColorMapTwo  (recolor)  — two source colors mapped independently
+# --------------------------------------------------------------------------
+
+class ColorMapTwo(Family):
+    name = "F9_colormap"
+    _colors = (1, 2, 3, 4, 6, 7, 8, 9)
+    _src_a, _src_b = 5, 6  # signal drawn with two marker colors
+
+    def ledger(self) -> CausalLedger:
+        return CausalLedger(
+            family=self.name,
+            variables=(
+                Variable("map_a", Role.C, self._colors, "target color for source region A"),
+                Variable("map_b", Role.C, self._colors, "target color for source region B"),
+                *_NUISANCE_VARS,
+            ),
+            reference_rule="output = recolor(A->map_a, B->map_b)",
+            rule_type="recolor",
+        )
+
+    def sample_latents(self, rng):
+        ma, mb = rng.choice(self._colors, size=2, replace=False)
+        return {"map_a": int(ma), "map_b": int(mb), **_sample_nuisance(rng)}
+
+    def _two_region_signal(self, content_seed: int) -> Grid:
+        rng = _rng(content_seed)
+        signal = _draw_signal(content_seed, self._src_a, n_cells_range=(4, 7))
+        # recolor roughly half the object's cells to src_b
+        cells = list(zip(*np.where(signal == self._src_a)))
+        rng.shuffle(cells)
+        for r, c in cells[: len(cells) // 2]:
+            signal[r, c] = self._src_b
+        return signal
+
+    def render(self, latents, content_seed):
+        signal = self._two_region_signal(content_seed)
+        output = signal.copy()
+        output[signal == self._src_a] = int(latents["map_a"])
+        output[signal == self._src_b] = int(latents["map_b"])
+        inp = _compose_input(signal, latents, content_seed)
+        return inp, output
+
+
+# --------------------------------------------------------------------------
+# F10 — RecolorByHalf  (recolor)  — color depends on object's vertical position
+# --------------------------------------------------------------------------
+
+class RecolorByHalf(Family):
+    name = "F10_recolor_half"
+    _colors = (1, 2, 3, 4, 6, 7, 8, 9)
+    _marker = 5
+
+    def ledger(self) -> CausalLedger:
+        return CausalLedger(
+            family=self.name,
+            variables=(
+                Variable("color_top", Role.C, self._colors, "output color when object in top half"),
+                Variable("color_bottom", Role.C, self._colors, "output color when object in bottom half"),
+                *_NUISANCE_VARS,
+            ),
+            reference_rule="output = recolor(signal, color_top if centroid in top half else color_bottom)",
+            rule_type="recolor",
+        )
+
+    def sample_latents(self, rng):
+        ct, cb = rng.choice(self._colors, size=2, replace=False)
+        return {"color_top": int(ct), "color_bottom": int(cb), **_sample_nuisance(rng)}
+
+    def render(self, latents, content_seed):
+        signal = _draw_signal(content_seed, self._marker)
+        rows = np.where((signal == self._marker).any(axis=1))[0]
+        centroid = rows.mean()
+        top = centroid < CANVAS / 2
+        target = int(latents["color_top"]) if top else int(latents["color_bottom"])
+        output = signal.copy()
+        output[signal == self._marker] = target
+        inp = _compose_input(signal, latents, content_seed)
+        return inp, output
+
+
 # Registry --------------------------------------------------------------------
 FAMILIES: Dict[str, Family] = {
     f.name: f
@@ -403,5 +596,10 @@ FAMILIES: Dict[str, Family] = {
         ReflectByAxis(),
         GravityDrop(),
         ShortcutRecolor(),
+        Rotate90(),
+        RecolorBySize(),
+        TranslateDiagonal(),
+        ColorMapTwo(),
+        RecolorByHalf(),
     )
 }

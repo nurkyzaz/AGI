@@ -1,0 +1,24 @@
+# Large / binary research assets (copyrighted papers; keep out of git)
+ARC AGI/
+*.pdf
+
+# macOS cruft
+__MACOSX/
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Regenerable data & scratch
+data/
+*.tmp
+
+# Nested project: cascadearc is its own git repo (competition solver),
+# versioned separately. Excluded here to avoid an embedded-repo gitlink.
+cascadearc/

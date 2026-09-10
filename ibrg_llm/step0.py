@@ -136,15 +136,49 @@ def main():
     L = H.shape[1]
     print("\n===== (B) PROBES  (balanced acc; axis chance=0.5, frame chance~0.125) =====")
     print(f"{'layer':>5} {'axis':>6} {'axis_shuf':>10} {'frame':>7} {'frame_shuf':>11}")
-    best_axis = 0.0
+    res = {"layer": [], "axis": [], "axis_shuf": [], "frame": [], "frame_shuf": []}
     for L_i in range(L):
         X = H[:, L_i, :]
         a = probe_layer(X, y_axis)
         a_sh = probe_layer(X, np.random.default_rng(0).permutation(y_axis))
         f = probe_layer(X, y_frame)
         f_sh = probe_layer(X, np.random.default_rng(0).permutation(y_frame))
-        best_axis = max(best_axis, a)
+        for kk, vv in zip(res, (L_i, a, a_sh, f, f_sh)):
+            res[kk].append(float(vv))
         print(f"{L_i:>5} {a:>6.3f} {a_sh:>10.3f} {f:>7.3f} {f_sh:>11.3f}")
+    best_axis = max(res["axis"])
+
+    # --- persist results + a normalized-depth selectivity plot (the H2 headline) ---
+    import json, os
+    outdir = os.path.join(os.path.dirname(__file__), "out")
+    os.makedirs(outdir, exist_ok=True)
+    summary = {
+        "model": args.model, "family": args.family, "k": args.k,
+        "n_probe": args.n_probe, "n_behav": args.n_behav,
+        "behavioral": {"exact": ex_hits / n, "cell_model": cells / n,
+                       "cell_copy_input": copy_cells / n, "cell_all_zero": zero_cells / n,
+                       "wellformed": wellformed / n},
+        "probes": res, "best_axis": best_axis,
+    }
+    with open(os.path.join(outdir, "step0_results.json"), "w") as fh:
+        json.dump(summary, fh, indent=2)
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        xs = [l / (L - 1) for l in res["layer"]]
+        plt.figure(figsize=(7, 4.5))
+        plt.plot(xs, res["axis"], "-o", ms=3, label="axis (causal, inferred)")
+        plt.plot(xs, res["frame"], "-s", ms=3, label="frame_color (nuisance, surface)")
+        plt.plot(xs, res["axis_shuf"], "--", color="gray", lw=1, label="axis shuffled floor")
+        plt.plot(xs, res["frame_shuf"], ":", color="gray", lw=1, label="frame shuffled floor")
+        plt.xlabel("normalized depth (layer / final)"); plt.ylabel("probe balanced accuracy")
+        plt.title(f"Causal vs nuisance decodability across depth\n{args.model} · {args.family}")
+        plt.ylim(0, 1.02); plt.legend(fontsize=8); plt.tight_layout()
+        plt.savefig(os.path.join(outdir, "step0_selectivity.png"), dpi=130)
+        print(f"[saved] {outdir}/step0_selectivity.png + step0_results.json")
+    except Exception as e:
+        print(f"[plot skipped] {e}")
 
     print("\n===== GO / NO-GO =====")
     beh = "engages" if (cells / n) > max(copy_cells, zero_cells) / n + 0.02 else "WEAK"

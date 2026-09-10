@@ -60,3 +60,28 @@ Real runs need a GPU. This M1 cannot hold a 4-8B model, so Step 0's *decodabilit
 check runs on the **cluster** (user is arranging access), not here. On this
 machine I finish: stimulus code, activation-extraction + probing code (unit-
 tested against mock tensors), and the runbook. See PLAN.md for the exact ask.
+
+## 2026-09-10 — Cluster access + Step-0 launch (CUHK physics `gpus`)
+
+Got working passwordless access via the existing `gpus` alias
+(`gpus.phy.cuhk.edu.hk`, user `nurkyz`) — the same SLURM box the AGI pilot uses.
+Recon: partitions `normal`/`debug`/`a`/`b`/`c`, gpu:2-6 per node; `agi` conda env
+has torch 2.6+cu126; login node has internet. **Remote commands must be piped to
+`bash -s` via heredoc** — the tcsh login shell chokes on `$(...)` in argv.
+
+Setup done: pip-installed `transformers 5.17` + `accelerate` into the `agi` env;
+downloaded `Qwen/Qwen2.5-3B-Instruct` (6.0 G) into `~/.cache/huggingface`.
+**Disk note:** home quota is 150 G soft / 160 G hard, was 136 G used -> the model
+took us to ~142 G. That is why I chose 3B over 7B (7B would breach the soft
+quota); will delete the cache after. `/tmp` is big but node-local (not shared to
+GPU nodes), so home is the only shared cache.
+
+**Color fix shipped** (`ibrg_llm/stimuli.py`): object canonicalized to color 7,
+nuisance colors drawn disjoint from it -> 0/200 collisions, no camouflage.
+
+**Step 0 launched** (`ibrg_llm/step0.py`, job on `debug`): F3_reflect, k=3,
+n_probe=300, n_behav=40; probes `axis` (C, binary) and `frame_color` (U) per
+layer vs shuffled-label floors, plus a behavioral generation check with
+copy-input / all-zero baselines. Model subject = Qwen2.5-3B-Instruct (smoke-test
+size; the real study can scale up if disk is freed). Currently PENDING on GPU
+resources (cluster busy). Awaiting the go/no-go.

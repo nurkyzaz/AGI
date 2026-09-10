@@ -62,6 +62,32 @@ def _paint_barcode_row0(g: Grid, value: int, n_cells: int) -> None:
         v //= 9
 
 
+OBJ_COLOR = 7  # canonical object color (reserved; nuisance colors avoid it)
+
+
+def _clean_colors(gi: Grid, go: Grid, frame_c: int, dist_c: int) -> Tuple[Grid, Grid]:
+    """Remove color camouflage (Step-0a bug): the family draws the object in a
+    seed-dependent color that can collide with the nuisance frame/distractor,
+    hiding the object and entangling the U label with the signal.
+
+    Fix: force the object to OBJ_COLOR everywhere, the border ring to `frame_c`,
+    and the single interior distractor cell to `dist_c` — all three distinct and
+    != 0. The output is pure signal, so its colors identify the object cells.
+    Geometric families only (F2's output color is *causal*, so never recolor it).
+    """
+    sig = {int(v) for v in np.unique(go) if v != 0}
+    go = go.copy()
+    for c in sig:
+        go[go == c] = OBJ_COLOR
+    gi = gi.copy()
+    for c in sig:
+        gi[gi == c] = OBJ_COLOR                       # object cells -> canonical
+    interior = gi[1:-1, 1:-1]
+    interior[(interior != 0) & (interior != OBJ_COLOR)] = dist_c  # the distractor
+    gi[0, :] = gi[-1, :] = gi[:, 0] = gi[:, -1] = frame_c         # border ring
+    return gi, go
+
+
 def make_stimulus(
     family_name: str,
     rng: np.random.Generator,
@@ -79,6 +105,16 @@ def make_stimulus(
     latents = fam.sample_latents(rng)
     seeds = [int(rng.integers(1, 2**31)) for _ in range(k + 1)]
 
+    # color sanitation (Step-0a fix): geometric families draw the object in a
+    # seed-dependent color -> canonicalize it and pick nuisance colors disjoint
+    # from it so the object is never camouflaged and the U label is clean.
+    canonicalize = ledger.rule_type == "geometric"
+    if canonicalize:
+        pool = [c for c in (1, 2, 3, 4, 5, 6, 8, 9)]  # excludes 0 and OBJ_COLOR(7)
+        rng.shuffle(pool)
+        frame_c, dist_c = int(pool[0]), int(pool[1])
+        latents = {**latents, "frame_color": frame_c, "distractor_color": dist_c}
+
     # optional spurious barcode = joint causal index (train) or random (shifted)
     bc_val = None
     if barcode:
@@ -92,8 +128,10 @@ def make_stimulus(
 
     def render(seed: int) -> Tuple[Grid, Grid]:
         gi, go = fam.render(latents, seed)
+        if canonicalize:
+            gi, go = _clean_colors(gi, go, latents["frame_color"], latents["distractor_color"])
         if barcode:
-            _paint_barcode_row0(gi, bc_val, 2)
+            _paint_barcode_row0(gi, bc_val, 2)  # after border repaint, so it survives
         return gi, go
 
     parts: List[str] = [_HEADER]

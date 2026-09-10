@@ -79,9 +79,24 @@ GPU nodes), so home is the only shared cache.
 **Color fix shipped** (`ibrg_llm/stimuli.py`): object canonicalized to color 7,
 nuisance colors drawn disjoint from it -> 0/200 collisions, no camouflage.
 
-**Step 0 launched** (`ibrg_llm/step0.py`, job on `debug`): F3_reflect, k=3,
+**Step 0 launched** (`ibrg_llm/step0.py`): F3_reflect, k=3,
 n_probe=300, n_behav=40; probes `axis` (C, binary) and `frame_color` (U) per
 layer vs shuffled-label floors, plus a behavioral generation check with
 copy-input / all-zero baselines. Model subject = Qwen2.5-3B-Instruct (smoke-test
-size; the real study can scale up if disk is freed). Currently PENDING on GPU
-resources (cluster busy). Awaiting the go/no-go.
+size; the real study can scale up if disk is freed). Awaiting the go/no-go.
+
+## 2026-09-11 — GPU contention + robustness (deadline day)
+
+**All ~56 cluster GPUs are allocated** (checked GresUsed==Gres on every node;
+a3 down). So Step 0 is blocked purely on a GPU freeing — ETA unknown. `normal`
+is *low priority* ("nodes reserved for higher priority partitions"), so I submit
+across `a,b,c,normal` to grab the first freed GPU at best priority.
+
+**Converted srun -> `sbatch` (job 52054)** so the run is owned by the SLURM
+controller and completes whenever a GPU frees **independent of the user's laptop
+/ my session** — results persist to disk (`ibrg_llm/out/*.json,*.png`, log
+`logs/step0_sbatch.out`). The monitoring poller and any follow-on steps run from
+the laptop session, so they pause when the laptop sleeps and resume when it's
+back; the experiment itself does not depend on them. `step0.py` now saves the
+per-layer selectivity curve (PNG) + numbers so one GPU-grab yields the
+deliverable without re-queuing. matplotlib installed into the `agi` env.

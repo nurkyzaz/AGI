@@ -1,103 +1,64 @@
-# PLAN — In-context shortcut vs. rule: reading and steering how an LLM generalizes
+# PLAN v2 — Shortcut vs. rule in in-context learning: reading and steering how an LLM generalizes
+**The earned, real-model form of IB = RG.** Application project for MATS 12.0 (Neel Nanda).
 
-**Application project for MATS 12.0 (Neel Nanda).** Grounded in the Step-0 checks
-in DECISIONS.md. This is the honest, real-model form of the IB=RG hypothesis:
-*a model generalizes iff it compresses to the causal variables and discards the
-nuisance ones.* We test that on a real LLM with ground-truth causal/nuisance
-labels from the `causalarc` planted generators.
+## Intellectual motivation, made testable
+North star (IB = RG): a system generalizes by **selective compression** — keeping the
+variables that *causally* determine the output and discarding nuisance, the same
+coarse-graining RG performs in physics (Gordon et al. 2021 — proven for field
+theories only). The open empirical question the motivation doc poses: *does a
+learned network actually do this?* We test it on a **real LLM** with ground-truth
+**causal (rule)** vs **nuisance (spurious shortcut)** cues, in-context.
 
-## Research question
-When a nuisance feature is spuriously predictive of the answer in few-shot
-demonstrations, does an LLM rely on the shortcut or infer the true rule — and can
-we **read** that choice from its residual stream and **causally control** it?
+We turn four ideas from the motivation into cheap, real-model measurements, plus
+the causal test that makes it Neel-shaped:
 
-## Hypotheses (confirmatory unless marked)
-- **H1 (phenomenon is real — behavioral).** With a planted shortcut aligned in the
-  demos, query exact-match accuracy drops under `do(U)` recombination relative to a
-  no-shortcut control. *If it doesn't drop, there's no shortcut reliance to study —
-  strengthen the shortcut or report the negative honestly.*
-- **H2 (representational).** The rule (C) and the shortcut/nuisance (U) are linearly
-  decodable from residual-stream activations before the answer token; decodability
-  varies systematically by layer and token position.
-- **H3 (selective coarse-graining — the IB=RG signature).** Surface-nuisance
-  decodability *declines* with depth while inferred-rule decodability *rises*
-  (a crossover). **Causal control:** promoting the nuisance to be causal flips its
-  depth profile from discarded to preserved.
-- **H4 (causal / steering).** Ablating the shortcut direction (difference-of-means
-  or probe weight) reduces behavioral shortcut reliance **vs. a random-direction
-  ablation of equal norm** (the key baseline).
-- **H5 (applied, stretch).** A probe read at the coarse-grained layer yields fewer
-  `do(U)` false positives than an early-layer probe.
+| # | IB=RG idea (from motivation) | Measurement | Neel recommendation it serves |
+|---|---|---|---|
+| H1 | selective preservation **predicts generalization** | behavioral: does the model follow the shortcut or the rule on conflict queries? | **science of generalization** (why one solution over another) |
+| H2 | **selective preservation** of causal vs nuisance | probe: which cue is linearly decodable, rule vs shortcut? | monitoring probes / concept representations |
+| H3 | **layerwise coarse-graining (RG flow)** | probe rule vs nuisance decodability **across depth** | model biology of ICL |
+| H4 | **steering the compression** | **ablate the shortcut subspace** → does generalization shift to the rule? (vs random-direction control) | **steering / causal intervention** (his favorite) |
+| H5 | **IB phase transition** (β drives abrupt feature discovery) | k-sweep: as demos increase, does reliance flip shortcut→rule, and is it abrupt? | why one solution over another |
 
-## Technical setup — what we quantify and how
-- **Model.** A current, capable, *dense instruct* model — target **Qwen2.5-7B-Instruct**
-  (fallback 3–4B if compute-tight; parameterized by name so we can swap to
-  whatever's current, e.g. a Qwen3 dense checkpoint). Deliberately **not** GPT-2 /
-  Gemma-2 (Neel warns against old/tiny models). Greedy decoding, temperature 0.
-- **Activations.** Residual stream per layer via HF `output_hidden_states=True`
-  (or `nnsight` if we need sublayer sites). Probe positions: the last token of the
-  query input, mean over query-input tokens, and the ":" before the answer.
-- **Stimuli.** `causalarc` families, serialized by `ibrg_llm/stimuli.py`:
-  - `F3_reflect` — **binary** causal `axis` (chance = 50%, ideal probe target),
-    nuisance = `frame_color`, `distractor_color`.
-  - `F2_recolor_parity` — causal = output color; doubles as the **nuisance→causal
-    control** (a color that is causal here vs. nuisance in F3).
-  - k = 3 demos; the rule is fixed within a task and must be *inferred* from demos.
-  - Shortcut arm: top-row barcode = joint causal index in demos; recombined at the
-    query for the `do(U)` / shifted split.
-- **Metrics.**
-  - *Behavioral:* exact-match query-grid accuracy; **shortcut-reliance = acc(aligned) − acc(recombined)**.
-  - *Probe:* balanced accuracy per (layer, position, factor), 5-fold CV, averaged
-    over ≥3 probe seeds; report per-factor curves over depth.
-  - *Ablation:* change in shortcut-reliance after removing the direction, **minus**
-    the random-direction control; effect with bootstrap CI.
-- **Independent unit / stats.** Task (rule instance) is the unit; cluster-bootstrap
-  CIs over tasks; never treat cells or tokens as independent samples (carried over
-  from the causalarc discipline).
+## Task (text ICL on a real model)
+Each demo pairs a nonsense **shape** word and **color** word with a single-token
+label. Within a task the **shape→label** map is the true rule; **color** is a
+spurious cue perfectly aligned with the label in the demos. The query is a
+**conflict**: its shape implies one label, its color another. Which label the
+model prefers reveals whether it generalized via the rule or the shortcut.
+Nonsense words + digit labels force genuine ICL (no lexical prior) and a clean
+logit readout. Model: **Qwen2.5-3B-Instruct** (CPU-run; upgradeable).
 
-## Baselines & controls (Neel screens hard for these)
-- Random-direction ablation of matched norm (the H4 control).
-- Shuffled-label probe → chance floor for every probe number.
-- "Just ask the model" behavioral baseline (no intervention).
-- No-shortcut control condition (rule inferable, no barcode) — the ceiling.
-- Nuisance→causal flip (the H3 mechanism control).
+## Metrics
+- **H1** shortcut_pref = p(shortcut label)/(p(shortcut)+p(rule)) on conflict; hard-vote too. Sanity: aligned-query accuracy (did the model learn the mapping at all?).
+- **H2/H3** balanced-accuracy probes of shape-class (rule) and color-class (shortcut) per layer, scaled-feature logistic regression, vs shuffled-label floor. Chance = 1/3.
+- **H4** Δshortcut_pref after ablating the color (shortcut) subspace, **minus the random-subspace control**; contrast with ablating the shape (rule) subspace.
+- **H5** shortcut_pref vs demos-per-class k ∈ {1,2,3,4}.
+- Independent unit = **seed** (5 seeds); report mean ± cluster/seed bootstrap.
 
-## Sanity checks (documented in the write-up)
-- Read raw prompts **and model completions** (started in Step 0a; found the color
-  collision). Confirm the shortcut is actually predictive in demos and that
-  recombination truly breaks it (compute the correlation, don't assume).
-- Hand-check a sample of probe "positives" — are they really that class?
-- Confirm the rule is inferable at all (strong-model / oracle can do it), else H1
-  is vacuous.
-- Re-derive the headline shortcut-reliance number with a fresh one-liner.
+## Baselines & controls (Neel screens hard)
+Random-direction ablation of equal rank (H4 control) · shuffled-label probe floor
+(H2/H3) · aligned-accuracy sanity (model must be able to learn the mapping) ·
+shape-subspace ablation contrast · "hard vote" alongside the soft preference.
 
-## Pre-run gate items (must clear before believing anything)
-1. **Fix the color collision** (DECISIONS.md, Step 0a): nuisance colors disjoint
-   from the signal color(s) per task.
-2. **Step 0 go/no-go on the cluster:** (a) the model infers ≥1 rule few-shot above
-   chance with the shortcut absent; (b) at least one C factor is decodable above
-   its shuffled-label floor. If (a) fails for grids, switch to a text-token analog
-   with identical C/U/shortcut structure (substrate swap, same design). If (b)
-   fails, the representational arm is dead — report that and pivot to behavioral.
+## Sanity checks (in the write-up)
+Print label token ids + model top-5 on an aligned prompt (already catches the
+tokenization bug) · read raw prompts/completions · confirm conflict truly
+conflicts · re-derive the headline shortcut_pref with a fresh one-liner · assert
+label ids distinct.
 
-## Two-day timeline (today = Sep 9; ext. deadline Sep 11)
-- **Day 1 AM** — cluster env; fix colors; **Step 0 go/no-go**; pick the working
-  family + model size.
-- **Day 1 PM** — H1 behavioral shortcut-reliance; H2 probe sweep (layer×position) →
-  the headline selectivity graph.
-- **Day 2 AM** — H3 depth crossover + nuisance→causal control; H4 ablation vs
-  random-direction.
-- **Day 2 PM** — sanity checks, randomly-sampled qualitative examples, write-up +
-  executive summary + graphs. (H5 only if time.)
-- Fallback ladder if we run short: ship H1+H2 with clean sanity checks and an
-  honest "what we'd do next" — a well-analyzed partial result beats an
-  over-claimed full one.
+## The CPU job set (exactly what runs — matches this plan)
+- `ibrg_llm/shortcut.sbatch`: **CPU-only** SLURM array, **seeds 0–4**, each task runs
+  the *full* pipeline **H1 + H2 + H3 + H4 + H5** and saves `out/shortcut_seed{S}.json`.
+- CPU-only ⇒ **schedules immediately** despite GPU contention; `sbatch` ⇒ SLURM
+  controller owns it ⇒ **runs to completion after the laptop closes**.
+- After: aggregate 5 seeds → mean ± CI per hypothesis; one figure per H.
 
-## Compute needed (the ask)
-- **One GPU with ≥24 GB** (an A6000 is plenty). **No training** — inference +
-  activation extraction only, so this is light: a few thousand forward passes over
-  2 families × a few conditions is minutes-to-an-hour.
-- **Env:** `torch` (the cluster `agi` env already has 2.6+cu126) **+ `transformers`
-  + `accelerate` + `scikit-learn`** (+ optional `nnsight`). HF hub access to
-  download a 4–8B instruct checkpoint (~8–15 GB disk).
-- **Nothing exotic:** no multi-GPU, no fine-tuning, no long jobs.
+## Honest caveats (state up front)
+- A 3B may prefer the shortcut *trivially*; the interesting, causal result is
+  whether H4 can **steer it back** to the rule — that's the load-bearing claim.
+- ICL cue-competition is a proxy for "compression to causal variables," not the
+  physics claim; IB=RG stays motivation, never asserted.
+- Single model, single task family, CPU (fp32) — we report it as a focused study,
+  not a universal law, and list the obvious next steps (bigger model, more
+  families, token-position sweep).

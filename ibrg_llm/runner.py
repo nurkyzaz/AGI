@@ -57,14 +57,26 @@ def main():
         args.model, torch_dtype=dt, output_hidden_states=True)
     model = model.to(args.device).eval()
     dev = args.device
-    lab_id = {L: tok(f" {L}", add_special_tokens=False)["input_ids"][0] for L in LABELS}
-    print("[runner] label token ids:", lab_id, flush=True)
+    # " 1" tokenizes as [space, digit]; we want the DIGIT id, and we score it by
+    # appending the shared space token so next-token logits are over the digit.
+    sp_dig = {L: tok(f" {L}", add_special_tokens=False)["input_ids"] for L in LABELS}
+    space_id = sp_dig[LABELS[0]][0]
+    lab_id = {L: sp_dig[L][-1] for L in LABELS}
+    print("[runner] space_id:", space_id, "label ids:", lab_id, flush=True)
+    assert len(set(lab_id.values())) == len(lab_id), f"label token ids collide: {lab_id}"
 
     def last_logits_and_hidden(prompt):
-        ids = tok(prompt, return_tensors="pt").to(dev)
+        ids = tok(prompt, return_tensors="pt")["input_ids"]
+        ids = torch.cat([ids, torch.tensor([[space_id]])], dim=1).to(dev)  # score digit after "-> "
         with torch.no_grad():
-            out = model(**ids)
-        return out.logits[0, -1], out.hidden_states  # (V,), tuple(L+1) of (1,seq,d)
+            out = model(input_ids=ids)
+        return out.logits[0, -1], out.hidden_states
+
+    # diagnostic: does the model actually predict the right digit on an aligned prompt?
+    _dt = make_task(np.random.default_rng(12345), conflict=False)
+    _lg, _ = last_logits_and_hidden(_dt.prompt)
+    _top = torch.topk(_lg, 5).indices.tolist()
+    print(f"[diag] aligned correct={_dt.rule_label} model_top5={[tok.decode([i]) for i in _top]}", flush=True)
 
     # ---------- H1 behavioral ----------
     rng = np.random.default_rng(args.seed)
@@ -132,9 +144,10 @@ def main():
     def make_hook(B):
         Bt = torch.tensor(B, dtype=next(model.parameters()).dtype, device=dev)  # (r,d)
         def hook(mod, inp, out):
-            h = out[0]
-            proj = (h @ Bt.T) @ Bt      # (.,d)
-            return (h - proj,) + tuple(out[1:])
+            is_tuple = isinstance(out, tuple)          # Qwen2 layer output form varies by version
+            h = out[0] if is_tuple else out
+            h2 = h - (h @ Bt.T) @ Bt                   # project the cue subspace out
+            return ((h2,) + tuple(out[1:])) if is_tuple else h2
         return hook
 
     layer_mod = model.model.layers[abl_layer - 1]   # produces hidden_states[abl_layer]
@@ -154,13 +167,21 @@ def main():
           f"color_ablate={pref_color:.3f} random={pref_rand:.3f} shape_ablate={pref_shape:.3f}", flush=True)
     print(f"     -> color-ablation effect={sc_pref-pref_color:+.3f}  random effect={sc_pref-pref_rand:+.3f}", flush=True)
 
+    # ---------- H5 IB-transition: shortcut_pref vs demos-per-class k ----------
+    ksweep = {}
+    for kp in (1, 2, 3, 4):
+        tk = [make_task(rng, k_per=kp, conflict=True) for _ in range(args.n_behav)]
+        ksweep[kp], _ = behav(tk)
+        print(f"[H5] k_per={kp} shortcut_pref={ksweep[kp]:.3f}", flush=True)
+
     out = {
         "model": args.model, "seed": args.seed, "abl_layer": abl_layer,
         "H1": {"shortcut_pref": sc_pref, "hard_vote_shortcut": sc_hard,
                "aligned_acc": al_acc, "aligned_pref": al_pref},
-        "H2": {"rule_curve": rule_curve, "shortcut_curve": short_curve, "chance": 1/3},
+        "H2_H3": {"rule_curve": rule_curve, "shortcut_curve": short_curve, "chance": 1/3},
         "H4": {"base": sc_pref, "color_ablate": pref_color, "random_ablate": pref_rand,
                "shape_ablate": pref_shape},
+        "H5_ksweep": ksweep,
     }
     odir = os.path.join(os.path.dirname(__file__), "out")
     os.makedirs(odir, exist_ok=True)

@@ -33,7 +33,10 @@ class Task:
 
 
 def make_task(rng: np.random.Generator, n_classes: int = 3, k_per: int = 2,
-              conflict: bool = True) -> Task:
+              conflict: bool = True, shortcut_strength: float = 1.0) -> Task:
+    """shortcut_strength = probability a demo's COLOR is aligned with its label.
+    1.0 = a perfect shortcut; lower values make the color cue unreliable (for the
+    IB phase-diagram sweep). The SHAPE->label rule is always perfect."""
     shapes = list(rng.choice(SHAPES, size=n_classes, replace=False))
     colors = list(rng.choice(COLORS, size=n_classes, replace=False))
     labels = LABELS[:n_classes]
@@ -47,7 +50,11 @@ def make_task(rng: np.random.Generator, n_classes: int = 3, k_per: int = 2,
     demos = []
     for c in range(n_classes):
         for _ in range(k_per):
-            demos.append((cls_shape[c], cls_color[c], labels[c]))
+            col = cls_color[c]
+            if rng.random() > shortcut_strength:                 # weaken the shortcut
+                other = [cc for cc in range(n_classes) if cc != c]
+                col = cls_color[int(rng.choice(other))]
+            demos.append((cls_shape[c], col, labels[c]))
     rng.shuffle(demos)
 
     a = int(rng.integers(n_classes))                      # query shape class (rule)

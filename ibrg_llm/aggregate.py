@@ -1,0 +1,132 @@
+"""Post-hoc aggregation + figures across all seed/model runs (E + F + summaries).
+
+Reads ibrg_llm/out/*.json and produces one figure per experiment plus the
+headline E1 scatter (selectivity predicts generalization). Runs on CPU in
+seconds — invoke after the arrays finish:  python -m ibrg_llm.aggregate
+"""
+from __future__ import annotations
+import glob, json, os
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+OUT = os.path.join(os.path.dirname(__file__), "out")
+
+
+def load(pat):
+    return [json.load(open(f)) for f in sorted(glob.glob(os.path.join(OUT, pat)))]
+
+
+def mean_ci(vals):
+    v = np.array([x for x in vals if x == x])
+    if len(v) == 0:
+        return float("nan"), float("nan")
+    boot = [np.random.default_rng(i).choice(v, len(v)).mean() for i in range(2000)]
+    return float(v.mean()), float(np.std(boot))
+
+
+def fig_base():
+    runs = load("shortcut_seed*.json")
+    if not runs:
+        return
+    sp = [r["H1"]["shortcut_pref"] for r in runs]
+    al = [r["H1"]["aligned_acc"] for r in runs]
+    eff_c = [r["H4"]["base"] - r["H4"]["color_ablate"] for r in runs]
+    eff_r = [r["H4"]["base"] - r["H4"]["random_ablate"] for r in runs]
+    m_sp, e_sp = mean_ci(sp); m_al, e_al = mean_ci(al)
+    m_c, e_c = mean_ci(eff_c); m_r, e_r = mean_ci(eff_r)
+    fig, ax = plt.subplots(1, 2, figsize=(10, 4))
+    ax[0].bar(["shortcut_pref\n(conflict)", "aligned_acc\n(sanity)"], [m_sp, m_al],
+              yerr=[e_sp, e_al], color=["C1", "C0"], capsize=4)
+    ax[0].axhline(0.5, ls=":", color="gray"); ax[0].set_ylim(0, 1); ax[0].set_title(f"H1 behavioral (n={len(sp)} seeds)")
+    ax[1].bar(["color-ablate", "random-ablate"], [m_c, m_r], yerr=[e_c, e_r],
+              color=["C3", "gray"], capsize=4)
+    ax[1].axhline(0, color="k", lw=0.6); ax[1].set_title("H4 shortcut-ablation effect (Δ shortcut_pref)")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_base_H1_H4.png"), dpi=130); plt.close()
+    print("fig_base_H1_H4.png:", f"shortcut_pref={m_sp:.3f}±{e_sp:.3f} aligned={m_al:.3f} "
+          f"color_eff={m_c:+.3f}±{e_c:.3f} random_eff={m_r:+.3f}±{e_r:.3f}")
+
+
+def fig_scale():
+    fig_pts = {}
+    for abbr, pat in [("0.5B", "shortcut_q05b_s*.json"), ("1.5B", "shortcut_q15b_s*.json"),
+                      ("3B", "shortcut_seed*.json")]:
+        runs = load(pat)
+        if runs:
+            fig_pts[abbr] = mean_ci([r["H1"]["shortcut_pref"] for r in runs])
+    if len(fig_pts) < 2:
+        return
+    xs = list(fig_pts); ys = [fig_pts[k][0] for k in xs]; es = [fig_pts[k][1] for k in xs]
+    plt.figure(figsize=(6, 4)); plt.errorbar(xs, ys, yerr=es, marker="o", capsize=4)
+    plt.axhline(0.5, ls=":", color="gray"); plt.ylim(0, 1)
+    plt.ylabel("shortcut_pref (conflict)"); plt.title("A1 shortcut-reliance vs model scale")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_scale.png"), dpi=130); plt.close()
+    print("fig_scale.png:", {k: round(v[0], 3) for k, v in fig_pts.items()})
+
+
+def fig_phase():
+    runs = load("phase_seed*.json")
+    if not runs:
+        return
+    S = runs[0]["strengths"]; K = runs[0]["ks"]
+    M = np.zeros((len(S), len(K)))
+    for i, s in enumerate(S):
+        for j, k in enumerate(K):
+            M[i, j] = np.mean([r["B_phase"][f"s{s}_k{k}"] for r in runs])
+    plt.figure(figsize=(6, 4.5)); im = plt.imshow(M, aspect="auto", cmap="RdBu_r", vmin=0, vmax=1)
+    plt.colorbar(im, label="shortcut_pref"); plt.xticks(range(len(K)), K); plt.yticks(range(len(S)), S)
+    plt.xlabel("demos per class k"); plt.ylabel("shortcut strength")
+    plt.title("B IB phase diagram (shortcut reliance)")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_phase.png"), dpi=130); plt.close()
+    print("fig_phase.png saved")
+
+
+def fig_ablsweep():
+    runs = load("abl_seed*.json")
+    if not runs:
+        return
+    layers = sorted(int(k) for k in runs[0]["C1_layer_ablate"])
+    curve = [np.mean([r["base"] - r["C1_layer_ablate"][str(l)] for r in runs]) for l in layers]
+    alphas = sorted(int(a) for a in runs[0]["C3_dose"])
+    dose = [np.mean([r["C3_dose"][str(a)] for r in runs]) for a in alphas]
+    fig, ax = plt.subplots(1, 2, figsize=(11, 4))
+    ax[0].plot(layers, curve, "-o", ms=3); ax[0].axhline(0, color="k", lw=0.6)
+    ax[0].set_xlabel("layer"); ax[0].set_ylabel("Δ shortcut_pref (base − ablated)")
+    ax[0].set_title("C1 causal layer-sweep (shortcut ablation)")
+    ax[1].plot(alphas, dose, "-o", ms=3); ax[1].axhline(0.5, ls=":", color="gray")
+    ax[1].set_xlabel("steering α (−rule … +shortcut)"); ax[1].set_ylabel("shortcut_pref")
+    ax[1].set_title("C3 dose-response steering"); ax[1].set_ylim(0, 1)
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_ablsweep.png"), dpi=130); plt.close()
+    print("fig_ablsweep.png saved")
+
+
+def fig_selectivity():
+    """E1: selectivity (rule−shortcut decodability) vs generalization (1−shortcut_pref)."""
+    runs = load("phase_seed*.json")
+    if not runs:
+        return
+    xs, ys = [], []
+    for r in runs:
+        for s in r["strengths"]:
+            d = r["D_depth"][f"s{s}"]
+            sel = np.nanmax(d["shape"]) - np.nanmax(d["color"])       # rule minus shortcut decodability
+            gen = 1 - np.mean([r["B_phase"][f"s{s}_k{k}"] for k in r["ks"]])  # rule-following
+            xs.append(sel); ys.append(gen)
+    xs, ys = np.array(xs), np.array(ys)
+    rho = float(np.corrcoef(xs, ys)[0, 1]) if len(xs) > 2 else float("nan")
+    plt.figure(figsize=(6, 4.5)); plt.scatter(xs, ys, alpha=0.6)
+    plt.xlabel("selectivity: rule − shortcut decodability")
+    plt.ylabel("generalization: rule-following (1 − shortcut_pref)")
+    plt.title(f"E1 selectivity predicts generalization (r={rho:.2f})")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_selectivity.png"), dpi=130); plt.close()
+    print(f"fig_selectivity.png: r={rho:.3f} over {len(xs)} points")
+
+
+if __name__ == "__main__":
+    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity):
+        try:
+            f()
+        except Exception as e:
+            print(f"[skip] {f.__name__}: {e}")
+    print("done — figures in ibrg_llm/out/")

@@ -88,43 +88,76 @@ def fig_ablsweep():
         return
     layers = sorted(int(k) for k in runs[0]["C1_layer_ablate"])
     curve = [np.mean([r["base"] - r["C1_layer_ablate"][str(l)] for r in runs]) for l in layers]
+    # C3 is a perturbation-SENSITIVITY test (the color-subspace axis has arbitrary
+    # sign, so we plot |shortcut_pref − base| vs |alpha|, NOT signed rule/shortcut steering).
     alphas = sorted(int(a) for a in runs[0]["C3_dose"])
-    dose = [np.mean([r["C3_dose"][str(a)] for r in runs]) for a in alphas]
+    dose = [np.mean([abs(r["C3_dose"][str(a)] - r["base"]) for r in runs]) for a in alphas]
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
     ax[0].plot(layers, curve, "-o", ms=3); ax[0].axhline(0, color="k", lw=0.6)
     ax[0].set_xlabel("layer"); ax[0].set_ylabel("Δ shortcut_pref (base − ablated)")
-    ax[0].set_title("C1 causal layer-sweep (shortcut ablation)")
-    ax[1].plot(alphas, dose, "-o", ms=3); ax[1].axhline(0.5, ls=":", color="gray")
-    ax[1].set_xlabel("steering α (−rule … +shortcut)"); ax[1].set_ylabel("shortcut_pref")
-    ax[1].set_title("C3 dose-response steering"); ax[1].set_ylim(0, 1)
+    ax[0].set_title("C1 causal layer-sweep (shortcut-subspace ablation)")
+    ax[1].plot(alphas, dose, "-o", ms=3)
+    ax[1].set_xlabel("perturbation magnitude α (arbitrary sign)")
+    ax[1].set_ylabel("|Δ shortcut_pref| vs base")
+    ax[1].set_title("C3 sensitivity to shortcut-subspace perturbation")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_ablsweep.png"), dpi=130); plt.close()
     print("fig_ablsweep.png saved")
 
 
+def _model_runs():
+    """All per-model×seed runs (base 3B + scale sweep), each with H1 + H2_H3."""
+    tagged = [("3B", "shortcut_seed*.json"), ("1.5B", "shortcut_q15b_s*.json"),
+              ("0.5B", "shortcut_q05b_s*.json")]
+    out = []
+    for name, pat in tagged:
+        for r in load(pat):
+            h = r.get("H2_H3") or r.get("H2")
+            if h is None:
+                continue
+            out.append((name, np.nanmax(h["rule_curve"]) - np.nanmax(h["shortcut_curve"]),
+                        np.nanmax(h["shortcut_curve"]), r["H1"]["shortcut_pref"]))
+    return out
+
+
 def fig_selectivity():
-    """E1: selectivity (rule−shortcut decodability) vs generalization (1−shortcut_pref)."""
-    runs = load("phase_seed*.json")
-    if not runs:
+    """E1 (non-circular): across MODELS x SEEDS, does rule-vs-shortcut probe
+    selectivity predict rule-following? Variation comes from model/seed, not from
+    a knob that mechanically drives both quantities."""
+    runs = _model_runs()
+    if len(runs) < 3:
         return
-    xs, ys = [], []
-    for r in runs:
-        for s in r["strengths"]:
-            d = r["D_depth"][f"s{s}"]
-            sel = np.nanmax(d["shape"]) - np.nanmax(d["color"])       # rule minus shortcut decodability
-            gen = 1 - np.mean([r["B_phase"][f"s{s}_k{k}"] for k in r["ks"]])  # rule-following
-            xs.append(sel); ys.append(gen)
-    xs, ys = np.array(xs), np.array(ys)
-    rho = float(np.corrcoef(xs, ys)[0, 1]) if len(xs) > 2 else float("nan")
-    plt.figure(figsize=(6, 4.5)); plt.scatter(xs, ys, alpha=0.6)
-    plt.xlabel("selectivity: rule − shortcut decodability")
+    names = [r[0] for r in runs]
+    xs = np.array([r[1] for r in runs]); ys = np.array([1 - r[3] for r in runs])
+    rho = float(np.corrcoef(xs, ys)[0, 1])
+    plt.figure(figsize=(6, 4.5))
+    for nm in set(names):
+        m = [i for i, n in enumerate(names) if n == nm]
+        plt.scatter(xs[m], ys[m], label=nm, alpha=0.75)
+    plt.xlabel("selectivity: rule − shortcut probe (best layer)")
     plt.ylabel("generalization: rule-following (1 − shortcut_pref)")
-    plt.title(f"E1 selectivity predicts generalization (r={rho:.2f})")
-    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_selectivity.png"), dpi=130); plt.close()
-    print(f"fig_selectivity.png: r={rho:.3f} over {len(xs)} points")
+    plt.title(f"E1 selectivity vs generalization across models×seeds (r={rho:.2f})")
+    plt.legend(fontsize=8); plt.tight_layout()
+    plt.savefig(os.path.join(OUT, "fig_selectivity.png"), dpi=130); plt.close()
+    print(f"fig_selectivity.png: r={rho:.3f} over {len(xs)} model×seed runs")
+
+
+def fig_monitor():
+    """F1: is a probe of the shortcut cue a usable monitor — does higher
+    shortcut-cue decodability go with more shortcut reliance?"""
+    runs = _model_runs()
+    if len(runs) < 3:
+        return
+    xs = np.array([r[2] for r in runs]); ys = np.array([r[3] for r in runs])
+    rho = float(np.corrcoef(xs, ys)[0, 1])
+    plt.figure(figsize=(6, 4.5)); plt.scatter(xs, ys, alpha=0.75, color="C3")
+    plt.xlabel("shortcut-cue decodability (best layer)"); plt.ylabel("shortcut_pref")
+    plt.title(f"F1 shortcut-probe as a monitor (r={rho:.2f})")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_monitor.png"), dpi=130); plt.close()
+    print(f"fig_monitor.png: r={rho:.3f}")
 
 
 if __name__ == "__main__":
-    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity):
+    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity, fig_monitor):
         try:
             f()
         except Exception as e:

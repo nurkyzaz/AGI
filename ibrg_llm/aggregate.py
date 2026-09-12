@@ -156,8 +156,38 @@ def fig_monitor():
     print(f"fig_monitor.png: r={rho:.3f}")
 
 
+def fig_vib():
+    """Track B: the controlled IB=RG beta-sweep."""
+    runs = load("vib_seed*.json")
+    if not runs:
+        return
+    betas = [s["beta"] for s in runs[0]["sweep"]]
+    avg = lambda k: [float(np.mean([r["sweep"][i][k] for r in runs])) for i in range(len(betas))]
+    R, tr, te = avg("rate"), avg("train_acc"), avg("test_acc")
+    sr, cr = avg("shortcut_retention"), avg("causal_retention")
+    x = [max(b, 1e-5) for b in betas]
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4.5))
+    ax[0].plot(x, te, "-o", label="test acc (OOD generalization)")
+    ax[0].plot(x, tr, "-o", alpha=0.4, label="train acc")
+    ax[0].plot(x, sr, "-s", label="shortcut retention in z")
+    ax[0].plot(x, cr, "-^", label="causal retention in z")
+    ax[0].set_xscale("log"); ax[0].set_xlabel("β (compression)")
+    ax[0].set_ylabel("accuracy / decodability"); ax[0].legend(fontsize=8)
+    ax[0].set_title("Track B: IB=RG vs compression β")
+    ax[1].plot(R, te, "-o")
+    for i, b in enumerate(betas):
+        ax[1].annotate(f"{b:g}", (R[i], te[i]), fontsize=6)
+    ax[1].set_xlabel("rate R = KL(z) [nats]"); ax[1].set_ylabel("OOD test acc")
+    ax[1].set_title("rate–distortion: rate vs generalization")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_vib.png"), dpi=130); plt.close()
+    bi = int(np.argmax(te))
+    print(f"fig_vib.png: best OOD test_acc={te[bi]:.3f} at β={betas[bi]:g}; "
+          f"shortcut_retention there={sr[bi]:.3f} vs {sr[0]:.3f} at β=0; "
+          f"causal_retention={cr[bi]:.3f}")
+
+
 if __name__ == "__main__":
-    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity, fig_monitor):
+    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity, fig_monitor, fig_vib):
         try:
             f()
         except Exception as e:

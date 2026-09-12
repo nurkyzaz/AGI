@@ -164,12 +164,12 @@ def fig_vib():
     betas = [s["beta"] for s in runs[0]["sweep"]]
     avg = lambda k: [float(np.mean([r["sweep"][i][k] for r in runs])) for i in range(len(betas))]
     R, tr, te = avg("rate"), avg("train_acc"), avg("test_acc")
-    sr, cr = avg("shortcut_retention"), avg("causal_retention")
+    nr, cr = avg("nuisance_recon"), avg("causal_retention")
     x = [max(b, 1e-5) for b in betas]
     fig, ax = plt.subplots(1, 2, figsize=(12, 4.5))
     ax[0].plot(x, te, "-o", label="test acc (OOD generalization)")
     ax[0].plot(x, tr, "-o", alpha=0.4, label="train acc")
-    ax[0].plot(x, sr, "-s", label="shortcut retention in z")
+    ax[0].plot(x, nr, "-s", label="nuisance reconstruction from z")
     ax[0].plot(x, cr, "-^", label="causal retention in z")
     ax[0].set_xscale("log"); ax[0].set_xlabel("β (compression)")
     ax[0].set_ylabel("accuracy / decodability"); ax[0].legend(fontsize=8)
@@ -181,9 +181,8 @@ def fig_vib():
     ax[1].set_title("rate–distortion: rate vs generalization")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_vib.png"), dpi=130); plt.close()
     bi = int(np.argmax(te))
-    print(f"fig_vib.png: best OOD test_acc={te[bi]:.3f} at β={betas[bi]:g}; "
-          f"shortcut_retention there={sr[bi]:.3f} vs {sr[0]:.3f} at β=0; "
-          f"causal_retention={cr[bi]:.3f}")
+    print(f"fig_vib.png: best OOD test_acc={te[bi]:.3f} at β={betas[bi]:g} vs {te[0]:.3f} at β=0; "
+          f"nuisance_recon {nr[0]:.3f}→{nr[bi]:.3f}; causal_retention={cr[bi]:.3f}")
 
 
 if __name__ == "__main__":

@@ -210,8 +210,85 @@ def fig_boundary():
     print(f"fig_boundary.png: best OOD test — spurious(compression)={sp:.3f} vs intervention={iv:.3f}")
 
 
+def _crit_avg(cond):
+    runs = load("crit_seed*.json")
+    if not runs:
+        return None
+    betas = runs[0]["betas"]
+    avg = lambda i, k: float(np.mean([r["conditions"][cond][i][k] for r in runs]))
+    return betas, avg, len(runs)
+
+
+def fig_foliation():
+    """P1 capstone: the causal rule is invisible to observation, visible to intervention.
+    Left  — recomb (do(U)) sweep: OOD generalization + how well obs vs cross-environment
+             scores separate a rule direction from a shortcut direction, vs beta.
+    Right — at the best-generalizing beta, rule and shortcut directions read off the
+             training data EQUALLY (obs), but differ across environments (invariance)."""
+    got = _crit_avg("recomb")
+    if got is None:
+        return
+    betas, avg, n = got
+    x = [max(b, 1e-4) for b in betas]
+    ood = [avg(i, "ood_acc") for i in range(len(betas))]
+    obs = [avg(i, "obs_auc") for i in range(len(betas))]
+    inv = [avg(i, "inv_auc") for i in range(len(betas))]
+    bstar = int(np.argmax(ood))
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4.6))
+    ax[0].plot(x, ood, "-o", color="C2", label="OOD accuracy (new data)")
+    ax[0].plot(x, obs, "-s", color="C0", label="obs. score separates rule/shortcut (AUC)")
+    ax[0].plot(x, inv, "-^", color="C3", label="across-environment score separates them (AUC)")
+    ax[0].axhline(0.5, ls=":", color="gray", lw=0.8)
+    ax[0].axvline(x[bstar], ls="--", color="C2", lw=0.8, label=f"best-generalizing β={betas[bstar]:g}")
+    ax[0].set_xscale("log"); ax[0].set_xlabel("compression β"); ax[0].set_ylabel("accuracy / separation (AUC)")
+    ax[0].set_ylim(0, 1.02); ax[0].legend(fontsize=7.5, loc="lower left")
+    ax[0].set_title(f"do(U)-trained network generalizes (n={n} seeds)")
+    # right: the two "leaves" on the shortcut-aligned distribution (crispest: obs identical)
+    ga = _crit_avg("aligned")
+    if ga is not None:
+        _, avga, _ = ga
+        oc, os_ = avga(0, "obs_causal"), avga(0, "obs_spurious")   # beta=0
+        ic, is_ = avga(0, "inv_causal"), avga(0, "inv_spurious")
+        obs_auc0, inv_auc0 = avga(0, "obs_auc"), avga(0, "inv_auc")
+        g = np.arange(2); w = 0.36
+        ax[1].bar(g - w / 2, [oc, ic], w, label="rule direction", color="C2")
+        ax[1].bar(g + w / 2, [os_, is_], w, label="shortcut direction", color="C1")
+        ax[1].set_xticks(g); ax[1].set_xticklabels([f"read off training data\n(observation) — sep AUC {obs_auc0:.2f}",
+                                                    f"predict across environments\n(intervention) — sep AUC {inv_auc0:.2f}"])
+        ax[1].axhline(0.5, ls=":", color="gray", lw=0.8)
+        ax[1].set_ylim(0, 1.02); ax[1].set_ylabel("label recovered (accuracy)")
+        ax[1].legend(fontsize=8)
+        ax[1].set_title("Shortcut-aligned data: identical to observation, different to intervention")
+        print(f"fig_foliation.png: [aligned β=0] obs rule/shortcut {oc:.2f}/{os_:.2f} (sep_auc={obs_auc0:.2f}); "
+              f"across-env {ic:.2f}/{is_:.2f} (sep_auc={inv_auc0:.2f}) | [recomb] best OOD {ood[bstar]:.2f} at β={betas[bstar]:g}")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_foliation.png"), dpi=130); plt.close()
+
+
+def fig_fdt():
+    """E3 (descriptive): response to a latent nudge (chi) and latent spread (Var z) both
+    fall together as compression rises — no critical peak. Honest null for 'criticality'."""
+    got = _crit_avg("recomb")
+    if got is None:
+        return
+    betas, avg, n = got
+    x = [max(b, 1e-4) for b in betas]
+    chi = [avg(i, "chi") for i in range(len(betas))]
+    var = [avg(i, "fluct_var_z") for i in range(len(betas))]
+    fig, ax1 = plt.subplots(figsize=(6.4, 4.6))
+    ax1.plot(x, chi, "-o", color="C3", label="response to latent nudge  χ")
+    ax1.set_xscale("log"); ax1.set_yscale("log"); ax1.set_xlabel("compression β")
+    ax1.set_ylabel("response χ", color="C3"); ax1.tick_params(axis="y", labelcolor="C3")
+    ax2 = ax1.twinx()
+    ax2.plot(x, var, "-s", color="C0", label="latent spread  Var(z)")
+    ax2.set_yscale("log"); ax2.set_ylabel("latent spread Var(z)", color="C0"); ax2.tick_params(axis="y", labelcolor="C0")
+    ax1.set_title(f"Response and latent spread fall together — no peak (n={n})")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_fdt.png"), dpi=130); plt.close()
+    print(f"fig_fdt.png: χ {chi[0]:.2f}→{chi[-1]:.3f}; Var(z) {var[0]:.1f}→{var[-1]:.2f} (both monotone in β)")
+
+
 if __name__ == "__main__":
-    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity, fig_monitor, fig_vib, fig_boundary):
+    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity, fig_monitor,
+              fig_vib, fig_boundary, fig_foliation, fig_fdt):
         try:
             f()
         except Exception as e:

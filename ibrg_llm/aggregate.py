@@ -185,8 +185,33 @@ def fig_vib():
           f"nuisance_recon {nr[0]:.3f}→{nr[bi]:.3f}; causal_retention={cr[bi]:.3f}")
 
 
+def fig_boundary():
+    """Track B boundary: compression can't fix a cheap shortcut; intervention can."""
+    runs = load("boundary_seed*.json")
+    if not runs:
+        return
+    betas = [r["beta"] for r in runs[0]["conditions"]["spurious"]]
+    avg = lambda c, k: [float(np.mean([r["conditions"][c][i][k] for r in runs])) for i in range(len(betas))]
+    nc = runs[0]["cfg"].get("n_classes", 4)
+    x = [max(b, 1e-4) for b in betas]
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4.5))
+    ax[0].plot(x, avg("spurious", "test_acc"), "-o", label="spurious (compression only)")
+    ax[0].plot(x, avg("intervention", "test_acc"), "-o", label="+ intervention do(U)")
+    ax[0].axhline(1.0 / nc, ls=":", color="gray", label="chance")
+    ax[0].set_xscale("log"); ax[0].set_xlabel("β"); ax[0].set_ylabel("OOD test acc")
+    ax[0].set_ylim(0, 1); ax[0].legend(fontsize=8)
+    ax[0].set_title("Compression can't fix the shortcut — intervention does")
+    ax[1].plot(x, avg("spurious", "shortcut_retention"), "-s", label="spurious")
+    ax[1].plot(x, avg("intervention", "shortcut_retention"), "-s", label="intervention")
+    ax[1].set_xscale("log"); ax[1].set_xlabel("β"); ax[1].set_ylabel("shortcut retention in z")
+    ax[1].legend(fontsize=8); ax[1].set_title("shortcut kept in z regardless of β")
+    plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_boundary.png"), dpi=130); plt.close()
+    sp, iv = max(avg("spurious", "test_acc")), max(avg("intervention", "test_acc"))
+    print(f"fig_boundary.png: best OOD test — spurious(compression)={sp:.3f} vs intervention={iv:.3f}")
+
+
 if __name__ == "__main__":
-    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity, fig_monitor, fig_vib):
+    for f in (fig_base, fig_scale, fig_phase, fig_ablsweep, fig_selectivity, fig_monitor, fig_vib, fig_boundary):
         try:
             f()
         except Exception as e:

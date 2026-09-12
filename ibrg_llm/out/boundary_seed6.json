@@ -1,0 +1,117 @@
+{
+  "seed": 6,
+  "cfg": {
+    "seed": 6,
+    "n_classes": 4,
+    "n_c": 4,
+    "z_dim": 32,
+    "n_train": 1500,
+    "n_test": 3000,
+    "epochs": 500,
+    "tag": "seed6"
+  },
+  "conditions": {
+    "spurious": [
+      {
+        "beta": 0.0,
+        "rate": 138.4813995361328,
+        "train_acc": 1.0,
+        "test_acc": 0.612,
+        "shortcut_retention": 1.0
+      },
+      {
+        "beta": 0.001,
+        "rate": 8.76060962677002,
+        "train_acc": 1.0,
+        "test_acc": 0.249,
+        "shortcut_retention": 1.0
+      },
+      {
+        "beta": 0.01,
+        "rate": 5.0370588302612305,
+        "train_acc": 1.0,
+        "test_acc": 0.249,
+        "shortcut_retention": 1.0
+      },
+      {
+        "beta": 0.03,
+        "rate": 3.3236217498779297,
+        "train_acc": 1.0,
+        "test_acc": 0.249,
+        "shortcut_retention": 1.0
+      },
+      {
+        "beta": 0.1,
+        "rate": 2.225802183151245,
+        "train_acc": 1.0,
+        "test_acc": 0.249,
+        "shortcut_retention": 1.0
+      },
+      {
+        "beta": 0.3,
+        "rate": 1.596032738685608,
+        "train_acc": 1.0,
+        "test_acc": 0.249,
+        "shortcut_retention": 1.0
+      },
+      {
+        "beta": 1.0,
+        "rate": 0.015085683204233646,
+        "train_acc": 0.5226666666666666,
+        "test_acc": 0.23566666666666666,
+        "shortcut_retention": 1.0
+      }
+    ],
+    "intervention": [
+      {
+        "beta": 0.0,
+        "rate": 202.48623657226562,
+        "train_acc": 1.0,
+        "test_acc": 0.997,
+        "shortcut_retention": 1.0
+      },
+      {
+        "beta": 0.001,
+        "rate": 12.301453590393066,
+        "train_acc": 1.0,
+        "test_acc": 0.996,
+        "shortcut_retention": 0.878886526839046
+      },
+      {
+        "beta": 0.01,
+        "rate": 5.00813102722168,
+        "train_acc": 1.0,
+        "test_acc": 0.9966666666666667,
+        "shortcut_retention": 0.6477815380662815
+      },
+      {
+        "beta": 0.03,
+        "rate": 3.4881911277770996,
+        "train_acc": 0.9993333333333333,
+        "test_acc": 0.9966666666666667,
+        "shortcut_retention": 0.5824983749750249
+      },
+      {
+        "beta": 0.1,
+        "rate": 2.335767984390259,
+        "train_acc": 0.9993333333333333,
+        "test_acc": 0.9973333333333333,
+        "shortcut_retention": 0.5331654422032255
+      },
+      {
+        "beta": 0.3,
+        "rate": 1.7270894050598145,
+        "train_acc": 0.9986666666666667,
+        "test_acc": 0.9976666666666667,
+        "shortcut_retention": 0.4675470433003482
+      },
+      {
+        "beta": 1.0,
+        "rate": 0.01087717991322279,
+        "train_acc": 0.2713333333333333,
+        "test_acc": 0.25166666666666665,
+        "shortcut_retention": 0.3497534718981859
+      }
+    ]
+  }
+}

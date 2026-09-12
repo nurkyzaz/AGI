@@ -4,6 +4,18 @@ prior program: `../ Intellectual Motivation.md`, `../MASTER_PLAN (1).md`, `../LI
 
 ---
 
+## 0. Where everything lives  (read first)
+- **GitHub (source of truth):** `github.com/nurkyzaz/AGI`, branch **`claude/agi-research-review-1244c8`**,
+  directory **`ibrg_llm/`**. The IB=RG work is on this branch, **not `main`**. Get it with:
+  `git clone https://github.com/nurkyzaz/AGI && cd AGI && git checkout claude/agi-research-review-1244c8`
+- **Code:** `ibrg_llm/*.py` (task/model/experiment modules — see §2 for what each does).
+- **Plan + log:** `ibrg_llm/HANDOFF.md` (this file) + `ibrg_llm/DECISIONS.md`.
+- **Results & figures:** `ibrg_llm/out/*.json` (per run) + `ibrg_llm/out/fig_*.png` — committed to the
+  branch; regenerate any figure with `python -m ibrg_llm.aggregate`.
+- **Cluster working copy:** `gpus:~/agi/ibrg_llm/` is **loose scp'd files, NOT under git**. Treat
+  GitHub as authoritative: `scp` code up before running, `scp` results back (results also live at
+  `gpus:~/agi/ibrg_llm/out/`). The cluster `~/agi` is *not* a git repo.
+
 ## 1. The thesis (what we are testing)
 **Information becomes law through *selective compression* + *intervention*.**
 - **Compression (IB=RG)** selectively preserves causal information and discards nuisance — but on a

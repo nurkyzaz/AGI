@@ -100,3 +100,54 @@ the laptop session, so they pause when the laptop sleeps and resume when it's
 back; the experiment itself does not depend on them. `step0.py` now saves the
 per-layer selectivity curve (PNG) + numbers so one GPU-grab yields the
 deliverable without re-queuing. matplotlib installed into the `agi` env.
+
+## 2026-09-13 — P1 done: foliation & criticality (`crit.py`), with an honest null
+
+(Note: the 2026-09-12 Track-B work — `vib.py`, `boundary.py` — is logged in commits and in
+HANDOFF §2, not here; this entry picks up at P1.)
+
+Built `crit.py` (the P1 capstone the handoff only *planned*) and ran it **CPU-local** — the
+laptop has torch 2.11 + sklearn + matplotlib, and P1 is seconds/seed, so no cluster was needed.
+5 seeds, 2 conditions (`aligned`, `recomb`/do(U)) × 8 βs.
+
+**Design decisions, each forced by a probe I ran before writing the production script (scratch
+probes, not committed — re-derive if extending):**
+- A clean low-rate shortcut is **never** dropped by compression — OOD stays at chance for all β
+  (reproduces the boundary result; this IS the thesis "IB can't separate a rule from a cheap
+  spurious, it even prefers it"). So there is **no robust interior β\*** inverted-U from pure
+  compression in this VIB. I did **not** manufacture one; I report the null.
+- The foliation's obs-AUC≈0.5 needs the shortcut to be **as** Y-predictive as the rule on the
+  training distribution → the **aligned** condition (shortcut==y on all train). Under recomb the
+  shortcut is only weakly predictive, so the rule is genuinely more observationally readable
+  (obs-AUC≈0.75). Hence crit.py runs BOTH conditions, mirroring boundary.py.
+- First E1 metric attempt used the **literal do(z+=εv) response** and FAILED (obs-AUC 0.875,
+  int-AUC 0.50). Root cause: for a *fixed* model the do() response is ~environment-invariant for
+  BOTH v_C and v_S (so it can't discriminate), and my ε was large enough to saturate the softmax.
+  Fix: the E1 discriminator is **cross-environment invariance of the label relation** — min over
+  environments of the a-vs-b decodability of ⟨z,v⟩ (the IRM criterion). Kept do(z+=εv) only for
+  the descriptive susceptibility χ (E3).
+
+**Results (`out/crit_seed*.json`, 5 seeds; `fig_foliation`, `fig_fdt`):**
+- **E1 foliation — SUPPORTED.** Aligned β=0: rule and shortcut directions read off the training
+  label EQUALLY (both 1.00 → observational separation-AUC **0.48**). Cross-environment invariance
+  separates them: rule predicts the label in every environment (0.83), shortcut only where it
+  lines up (0.73); inv-AUC up to **0.86–0.91** (recomb, low β).
+- **E2 criticality — NULL.** The v_C–v_S separation is largest at the *weakest* compression
+  (β≈0.001, gap 0.195) and shrinks with β; it does NOT peak at the generalization-optimal β
+  (recomb OOD optimum ≈0.1).
+- **E3 FDT — descriptive.** χ(β) and Var(z) both fall monotonically with β (χ 3.99→0.001,
+  Var 253→0.02); no shared peak.
+
+Added `fig_foliation` + `fig_fdt` to `aggregate.py`. Committed crit.py + results + figures and
+**fast-forwarded `main`** (which previously lacked `ibrg_llm/`) so the code has a clean public
+URL: github.com/nurkyzaz/AGI/tree/main/ibrg_llm. Also pushed the same to the research branch.
+
+**Non-research (same session):** wrote the MATS application from the committed results —
+`APPLICATION_EXEC_SUMMARY.md` (research write-up: question → 8 numbered experiments → conclusion →
+limitations, each figure explained; public-safe, committed) and, kept **local/uncommitted** because
+`main` is public, `APPLICATION_ANSWERS.md` + `APPLICATION_DOC.docx` (personal application answers +
+the figure-embedded Word doc). The .docx is built by a scratchpad script from the two .md files.
+
+**NEXT:** P1 is done → the forward plan is now **P2** (harden E1: within-model cross-seed,
+partial correlation controlling for aligned-accuracy, bidirectional ablation mediation) then P3.
+See HANDOFF §3.

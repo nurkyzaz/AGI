@@ -50,23 +50,35 @@ Code: `vib.py` (nuisance), `boundary.py` (spurious-shortcut vs intervention). Re
 - **BOUNDARY (headline)**: compression alone **cannot** fix a cheap spurious shortcut (OOD ~chance at
   every β; shortcut retention = 1.0), but **intervention `do(U)`** does (OOD **0.46 → 0.90**). The
   earned "compression ≠ generalization; interventions are required."
+### Track B — Foliation & criticality (`crit.py`)  *(P1, DONE 2026-09-13; CPU-local, 5 seeds)*
+Code: `crit.py` (runs `aligned` + `recomb`/do(U) conditions across a β-sweep). Results: `out/crit_seed*`.
+Figures: `fig_foliation`, `fig_fdt`.
+- **E1 foliation (SUPPORTED)**: on the training distribution a rule direction (`v_C`) and a shortcut
+  direction (`v_S`) decode the label **equally** (aligned β=0: both 1.00 → observational separation-AUC
+  **0.48**, i.e. observation can't tell them apart). Cross-environment invariance (min-over-env
+  label-decodability — the IRM criterion, *not* the literal do() response, see design note) **separates**
+  them: rule 0.83 vs shortcut 0.73; inv-AUC up to **0.86–0.91** (recomb, low β). "Rule invisible to
+  observation, visible to intervention."
+- **E2 criticality (NULL — reported, not manufactured)**: the `v_C`–`v_S` separation is **largest at the
+  weakest compression** (β≈0.001) and shrinks as β↑; it does **not** peak at the generalization-optimal
+  β* (recomb OOD optimum ≈0.1). "Susceptibility peaks at β*" is not supported in this VIB. Reason: a
+  cheap shortcut is kept at every β (no robust interior β* inverted-U from pure compression — the
+  boundary phenomenon), so β* was taken as the OOD optimum and the null reported honestly.
+- **E3 fluctuation–dissipation (descriptive)**: χ(β) (the do(z+=εv) response) and Var(z) both fall
+  monotonically with β (χ 3.99→0.001, Var 253→0.02), no shared peak.
+- **Design note (why crit.py is shaped this way; verify before extending)**: (1) obs-AUC≈0.5 needs the
+  shortcut to be as Y-predictive as the rule on train → the **aligned** condition; under recomb the rule
+  is genuinely more readable (obs-AUC≈0.75), so both conditions are run. (2) The literal `do(z+=εv)`
+  response is ~environment-invariant for a *fixed* model (both v_C and v_S), so it can't be the E1
+  discriminator — cross-environment invariance of the label relation is. Kept do() only for χ (E3).
 
 ## 3. NEXT — the forward plan (priority order)
-### P1 — Foliation & criticality  *(do first; the empirical capstone; CPU)*
-Build `crit.py`; one β-sweep on the VIB producing three measurements per β:
-- **E1 foliation** — for ground-truth causal (`v_C`) vs spurious (`v_S`) directions in z:
-  *observational* score (Y-decodability of ⟨z,v⟩ on train; variance along v) and *interventional*
-  score (response to `do(z += εv)` on recombined/OOD data; cross-environment invariance). Over many
-  directions (seeds × sub-blocks) report **observational-AUC (predict ≈0.5)** vs
-  **interventional-AUC (predict ≫0.5)** — the gap is the foliation, quantified.
-- **E2 criticality** — the interventional separation (`v_C` vs `v_S` response gap) **peaks at β\***
-  (the generalization optimum / rate–distortion kink). Locate β\* from the generalization curve.
-- **E3 fluctuation–dissipation** *(descriptive)* — response χ(β) vs fluctuation Var(z): coincide near
-  β\*, diverge where generalization jumps.
-- **Deliverable**: `fig_foliation` — the thesis panel (x=β: generalization locates β\*;
-  observational-discriminability flat at chance; interventional-discriminability peaks at β\*) + `fig_fdt`.
+### P1 — Foliation & criticality  ✔ **DONE (2026-09-13)** — see §2 "Track B — Foliation & criticality"
+`crit.py` built and run (5 seeds). **E1 foliation SUPPORTED** (obs-AUC 0.48; inv-AUC up to 0.86–0.91).
+**E2 criticality is a NULL** (separation peaks at weak β, not at β*). **E3 FDT** descriptive (χ, Var(z)
+fall together, no peak). Deliverables `fig_foliation`, `fig_fdt` shipped. **→ Start with P2 below.**
 
-### P2 — Harden E1 (make r=0.68 causal & scale-free)  *(CPU)*
+### P2 — Harden E1 (make r=0.68 causal & scale-free)  *(do first now; CPU)*
 Add to `runner.py`/a new driver: **bidirectional ablation mediation** (ablate shortcut → ↑selectivity
 → predict ↑generalization; ablate rule → ↓selectivity → ↓); **within-model cross-seed** E1;
 **partial correlation** of selectivity↔generalization controlling for aligned-accuracy. Turns the

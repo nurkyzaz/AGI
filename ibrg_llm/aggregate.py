@@ -1,7 +1,7 @@
-"""Post-hoc aggregation + figures across all seed/model runs (E + F + summaries).
+"""Post-hoc aggregation + figures across all seed/model runs.
 
-Reads ibrg_llm/out/*.json and produces one figure per experiment plus the
-headline E1 scatter (selectivity predicts generalization). Runs on CPU in
+Reads ibrg_llm/out/*.json and produces one figure per experiment. Error bars
+are the SD over seeds. Numbers quoted in the write-up come from stats.py. Runs on CPU in
 seconds — invoke after the arrays finish:  python -m ibrg_llm.aggregate
 """
 from __future__ import annotations
@@ -18,12 +18,12 @@ def load(pat):
     return [json.load(open(f)) for f in sorted(glob.glob(os.path.join(OUT, pat)))]
 
 
-def mean_ci(vals):
-    v = np.array([x for x in vals if x == x])
+def mean_sd(vals):
+    """Mean and sample SD over seeds (ddof=1) — the error bar used in every figure."""
+    v = np.array([x for x in vals if x == x], float)
     if len(v) == 0:
         return float("nan"), float("nan")
-    boot = [np.random.default_rng(i).choice(v, len(v)).mean() for i in range(2000)]
-    return float(v.mean()), float(np.std(boot))
+    return float(v.mean()), float(v.std(ddof=1)) if len(v) > 1 else 0.0
 
 
 def fig_base():
@@ -34,15 +34,20 @@ def fig_base():
     al = [r["H1"]["aligned_acc"] for r in runs]
     eff_c = [r["H4"]["base"] - r["H4"]["color_ablate"] for r in runs]
     eff_r = [r["H4"]["base"] - r["H4"]["random_ablate"] for r in runs]
-    m_sp, e_sp = mean_ci(sp); m_al, e_al = mean_ci(al)
-    m_c, e_c = mean_ci(eff_c); m_r, e_r = mean_ci(eff_r)
+    m_sp, e_sp = mean_sd(sp); m_al, e_al = mean_sd(al)
+    m_c, e_c = mean_sd(eff_c); m_r, e_r = mean_sd(eff_r)
     fig, ax = plt.subplots(1, 2, figsize=(10, 4))
-    ax[0].bar(["shortcut_pref\n(conflict)", "aligned_acc\n(sanity)"], [m_sp, m_al],
-              yerr=[e_sp, e_al], color=["C1", "C0"], capsize=4)
-    ax[0].axhline(0.5, ls=":", color="gray"); ax[0].set_ylim(0, 1); ax[0].set_title(f"H1 behavioral (n={len(sp)} seeds)")
-    ax[1].bar(["color-ablate", "random-ablate"], [m_c, m_r], yerr=[e_c, e_r],
+    ax[0].bar(["shortcut preference\n(rule and shortcut disagree)", "accuracy\n(rule and shortcut agree)"],
+              [m_sp, m_al], yerr=[e_sp, e_al], color=["C1", "C0"], capsize=4)
+    ax[0].axhline(0.5, ls=":", color="gray"); ax[0].set_ylim(0, 1)
+    ax[0].set_title(f"Qwen2.5-3B behavior (mean ± SD, n={len(sp)} seeds)")
+    ax[1].bar(["remove shortcut\ndirections", "remove random\ndirection"], [m_c, m_r], yerr=[e_c, e_r],
               color=["C3", "gray"], capsize=4)
-    ax[1].axhline(0, color="k", lw=0.6); ax[1].set_title("H4 shortcut-ablation effect (Δ shortcut_pref)")
+    ax[1].scatter([0] * len(eff_c) + [1] * len(eff_r), eff_c + eff_r, color="k", s=10, zorder=3)
+    ax[1].axhline(0, color="k", lw=0.6); ax[1].set_ylabel("drop in shortcut preference")
+    from scipy.stats import ttest_rel
+    p = ttest_rel(eff_c, eff_r).pvalue
+    ax[1].set_title(f"Removing directions, one layer (paired p = {p:.2f})", fontsize=11)
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_base_H1_H4.png"), dpi=130); plt.close()
     print("fig_base_H1_H4.png:", f"shortcut_pref={m_sp:.3f}±{e_sp:.3f} aligned={m_al:.3f} "
           f"color_eff={m_c:+.3f}±{e_c:.3f} random_eff={m_r:+.3f}±{e_r:.3f}")
@@ -54,13 +59,18 @@ def fig_scale():
                       ("3B", "shortcut_seed*.json")]:
         runs = load(pat)
         if runs:
-            fig_pts[abbr] = mean_ci([r["H1"]["shortcut_pref"] for r in runs])
+            fig_pts[abbr] = mean_sd([r["H1"]["shortcut_pref"] for r in runs]) + (
+                [r["H1"]["shortcut_pref"] for r in runs],)
     if len(fig_pts) < 2:
         return
     xs = list(fig_pts); ys = [fig_pts[k][0] for k in xs]; es = [fig_pts[k][1] for k in xs]
-    plt.figure(figsize=(6, 4)); plt.errorbar(xs, ys, yerr=es, marker="o", capsize=4)
-    plt.axhline(0.5, ls=":", color="gray"); plt.ylim(0, 1)
-    plt.ylabel("shortcut_pref (conflict)"); plt.title("A1 shortcut-reliance vs model scale")
+    plt.figure(figsize=(6, 4)); plt.errorbar(xs, ys, yerr=es, marker="o", capsize=4, label="mean ± SD over seeds")
+    for i, k in enumerate(xs):
+        plt.scatter([i] * len(fig_pts[k][2]), fig_pts[k][2], color="gray", s=10, alpha=0.7, zorder=3)
+    plt.axhline(0.5, ls=":", color="gray", label="no preference (0.5)"); plt.ylim(0.4, 0.6)
+    plt.xlabel("Qwen2.5-Instruct model size"); plt.legend(fontsize=8)
+    plt.ylabel("shortcut preference\n(share of answers following the shortcut)")
+    plt.title("Shortcut use by model size (n = 5 seeds each)")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_scale.png"), dpi=130); plt.close()
     print("fig_scale.png:", {k: round(v[0], 3) for k, v in fig_pts.items()})
 
@@ -77,7 +87,7 @@ def fig_phase():
     plt.figure(figsize=(6, 4.5)); im = plt.imshow(M, aspect="auto", cmap="RdBu_r", vmin=0, vmax=1)
     plt.colorbar(im, label="shortcut_pref"); plt.xticks(range(len(K)), K); plt.yticks(range(len(S)), S)
     plt.xlabel("demos per class k"); plt.ylabel("shortcut strength")
-    plt.title("B IB phase diagram (shortcut reliance)")
+    plt.title("Shortcut use vs cue strength and number of examples")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_phase.png"), dpi=130); plt.close()
     print("fig_phase.png saved")
 
@@ -95,11 +105,11 @@ def fig_ablsweep():
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
     ax[0].plot(layers, curve, "-o", ms=3); ax[0].axhline(0, color="k", lw=0.6)
     ax[0].set_xlabel("layer"); ax[0].set_ylabel("Δ shortcut_pref (base − ablated)")
-    ax[0].set_title("C1 causal layer-sweep (shortcut-subspace ablation)")
+    ax[0].set_title(f"Removing shortcut directions, layer by layer (n={len(runs)} seeds)")
     ax[1].plot(alphas, dose, "-o", ms=3)
     ax[1].set_xlabel("perturbation magnitude α (arbitrary sign)")
     ax[1].set_ylabel("|Δ shortcut_pref| vs base")
-    ax[1].set_title("C3 sensitivity to shortcut-subspace perturbation")
+    ax[1].set_title("Sensitivity to nudging the shortcut directions")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_ablsweep.png"), dpi=130); plt.close()
     print("fig_ablsweep.png saved")
 
@@ -135,7 +145,7 @@ def fig_selectivity():
         plt.scatter(xs[m], ys[m], label=nm, alpha=0.75)
     plt.xlabel("selectivity: rule − shortcut probe (best layer)")
     plt.ylabel("generalization: rule-following (1 − shortcut_pref)")
-    plt.title(f"E1 selectivity vs generalization across models×seeds (r={rho:.2f})")
+    plt.title(f"Probe gap vs rule-following (pooled r={rho:.2f}; driven by model size)")
     plt.legend(fontsize=8); plt.tight_layout()
     plt.savefig(os.path.join(OUT, "fig_selectivity.png"), dpi=130); plt.close()
     print(f"fig_selectivity.png: r={rho:.3f} over {len(xs)} model×seed runs")
@@ -147,11 +157,16 @@ def fig_monitor():
     runs = _model_runs()
     if len(runs) < 3:
         return
+    names = [r[0] for r in runs]
     xs = np.array([r[2] for r in runs]); ys = np.array([r[3] for r in runs])
     rho = float(np.corrcoef(xs, ys)[0, 1])
-    plt.figure(figsize=(6, 4.5)); plt.scatter(xs, ys, alpha=0.75, color="C3")
-    plt.xlabel("shortcut-cue decodability (best layer)"); plt.ylabel("shortcut_pref")
-    plt.title(f"F1 shortcut-probe as a monitor (r={rho:.2f})")
+    plt.figure(figsize=(6, 4.5))
+    for nm in ["0.5B", "1.5B", "3B"]:
+        m = [i for i, n in enumerate(names) if n == nm]
+        plt.scatter(xs[m], ys[m], label=nm, alpha=0.8)
+    plt.xlabel("shortcut probe accuracy (best layer)"); plt.ylabel("shortcut preference")
+    plt.legend(fontsize=8, title="model")
+    plt.title(f"Is a readable shortcut a used shortcut? (r={rho:.2f}, n={len(xs)}, n.s.)")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_monitor.png"), dpi=130); plt.close()
     print(f"fig_monitor.png: r={rho:.3f}")
 
@@ -173,12 +188,12 @@ def fig_vib():
     ax[0].plot(x, cr, "-^", label="causal retention in z")
     ax[0].set_xscale("log"); ax[0].set_xlabel("β (compression)")
     ax[0].set_ylabel("accuracy / decodability"); ax[0].legend(fontsize=8)
-    ax[0].set_title("Track B: IB=RG vs compression β")
+    ax[0].set_title("Small network, noise feature: effect of compression")
     ax[1].plot(R, te, "-o")
     for i, b in enumerate(betas):
         ax[1].annotate(f"{b:g}", (R[i], te[i]), fontsize=6)
     ax[1].set_xlabel("rate R = KL(z) [nats]"); ax[1].set_ylabel("OOD test acc")
-    ax[1].set_title("rate–distortion: rate vs generalization")
+    ax[1].set_title("Bits kept vs new-data accuracy")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_vib.png"), dpi=130); plt.close()
     bi = int(np.argmax(te))
     print(f"fig_vib.png: best OOD test_acc={te[bi]:.3f} at β={betas[bi]:g} vs {te[0]:.3f} at β=0; "
@@ -192,19 +207,24 @@ def fig_boundary():
         return
     betas = [r["beta"] for r in runs[0]["conditions"]["spurious"]]
     avg = lambda c, k: [float(np.mean([r["conditions"][c][i][k] for r in runs])) for i in range(len(betas))]
-    nc = runs[0]["cfg"].get("n_classes", 4)
+    sd = lambda c, k: [float(np.std([r["conditions"][c][i][k] for r in runs], ddof=1)) for i in range(len(betas))]
+    nc = runs[0]["cfg"]["n_classes"]
+    assert nc == 4, nc  # chance line below must be 1/4 = 0.25
     x = [max(b, 1e-4) for b in betas]
     fig, ax = plt.subplots(1, 2, figsize=(12, 4.5))
-    ax[0].plot(x, avg("spurious", "test_acc"), "-o", label="spurious (compression only)")
-    ax[0].plot(x, avg("intervention", "test_acc"), "-o", label="+ intervention do(U)")
-    ax[0].axhline(1.0 / nc, ls=":", color="gray", label="chance")
-    ax[0].set_xscale("log"); ax[0].set_xlabel("β"); ax[0].set_ylabel("OOD test acc")
+    lab = {"spurious": "compression only", "intervention": "compression + intervention"}
+    for c in ("spurious", "intervention"):
+        ax[0].errorbar(x, avg(c, "test_acc"), yerr=sd(c, "test_acc"), fmt="-o", capsize=3, label=lab[c])
+        ax[1].errorbar(x, avg(c, "shortcut_retention"), yerr=sd(c, "shortcut_retention"), fmt="-s", capsize=3, label=lab[c])
+    ax[0].axhline(1.0 / nc, ls=":", color="gray", label=f"chance ({1.0 / nc:.2f})")
+    ax[0].set_xscale("log"); ax[0].set_xlabel("compression β (0 plotted at 1e-4)")
+    ax[0].set_ylabel("accuracy on new data (shortcut broken)")
     ax[0].set_ylim(0, 1); ax[0].legend(fontsize=8)
-    ax[0].set_title("Compression can't fix the shortcut — intervention does")
-    ax[1].plot(x, avg("spurious", "shortcut_retention"), "-s", label="spurious")
-    ax[1].plot(x, avg("intervention", "shortcut_retention"), "-s", label="intervention")
-    ax[1].set_xscale("log"); ax[1].set_xlabel("β"); ax[1].set_ylabel("shortcut retention in z")
-    ax[1].legend(fontsize=8); ax[1].set_title("shortcut kept in z regardless of β")
+    ax[0].set_title(f"New-data accuracy (mean ± SD, n={len(runs)} seeds)")
+    ax[1].set_xscale("log"); ax[1].set_xlabel("compression β (0 plotted at 1e-4)")
+    ax[1].set_ylabel("shortcut readable from hidden code")
+    ax[1].set_ylim(0, 1.05); ax[1].legend(fontsize=8)
+    ax[1].set_title("How much of the shortcut the network keeps")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_boundary.png"), dpi=130); plt.close()
     sp, iv = max(avg("spurious", "test_acc")), max(avg("intervention", "test_acc"))
     print(f"fig_boundary.png: best OOD test — spurious(compression)={sp:.3f} vs intervention={iv:.3f}")
@@ -258,7 +278,7 @@ def fig_foliation():
         ax[1].axhline(0.5, ls=":", color="gray", lw=0.8)
         ax[1].set_ylim(0, 1.02); ax[1].set_ylabel("label recovered (accuracy)")
         ax[1].legend(fontsize=8)
-        ax[1].set_title("Shortcut-aligned data: identical to observation, different to intervention")
+        ax[1].set_title("Shortcut-aligned training, β = 0")
         print(f"fig_foliation.png: [aligned β=0] obs rule/shortcut {oc:.2f}/{os_:.2f} (sep_auc={obs_auc0:.2f}); "
               f"across-env {ic:.2f}/{is_:.2f} (sep_auc={inv_auc0:.2f}) | [recomb] best OOD {ood[bstar]:.2f} at β={betas[bstar]:g}")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_foliation.png"), dpi=130); plt.close()
@@ -281,7 +301,7 @@ def fig_fdt():
     ax2 = ax1.twinx()
     ax2.plot(x, var, "-s", color="C0", label="latent spread  Var(z)")
     ax2.set_yscale("log"); ax2.set_ylabel("latent spread Var(z)", color="C0"); ax2.tick_params(axis="y", labelcolor="C0")
-    ax1.set_title(f"Response and latent spread fall together — no peak (n={n})")
+    ax1.set_title(f"No peak in response or spread with compression (n={n})")
     plt.tight_layout(); plt.savefig(os.path.join(OUT, "fig_fdt.png"), dpi=130); plt.close()
     print(f"fig_fdt.png: χ {chi[0]:.2f}→{chi[-1]:.3f}; Var(z) {var[0]:.1f}→{var[-1]:.2f} (both monotone in β)")
 

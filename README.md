@@ -1,0 +1,5 @@
+# AGI — rule vs shortcut in neural networks
+
+This repo holds a small research project that started from the question of whether the information bottleneck (IB) behaves like the renormalization group (RG) in neural networks, and narrowed to a question the IB side alone can address: when a network can solve a task by the rule or by a shortcut, can compression or linear probes tell them apart? The main work is in [`ibrg_llm/`](ibrg_llm/); start with the one-page write-up [`ibrg_llm/APPLICATION_EXEC_SUMMARY.md`](ibrg_llm/APPLICATION_EXEC_SUMMARY.md), whose numbers all come from `python -m ibrg_llm.stats` (saved in `ibrg_llm/out/stats.txt`). The IB = RG link itself was not tested. [`causalarc/`](causalarc/) and `runs_causalarc/` are an archived first attempt (ARC-style grids) and are not maintained. Planning notes, literature reviews and the original agent instructions are in [`docs/planning/`](docs/planning/).
+
+How this was done: [CONFIRM: Experiments designed by Nurkyz Ydyrysova; code written and run with an AI coding agent under her direction; results checked by her.]

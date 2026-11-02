@@ -1,17 +1,19 @@
 # HANDOFF — IB=RG on real systems: status + the single forward plan
 **The one plan for the next agent.** Raw chronological log: `DECISIONS.md`. Original motivation &
-prior program: `../ Intellectual Motivation.md`, `../MASTER_PLAN (1).md`, `../LITERATURE_REVIEW_*.md`.
+prior program: `Intellectual Motivation.md`, `MASTER_PLAN (1).md`, `LITERATURE_REVIEW_*.md` (all in `docs/planning/`).
+
+> **Current status:** the honest summary of results is `ibrg_llm/APPLICATION_EXEC_SUMMARY.md`;
+> all its numbers come from `ibrg_llm/stats.py` → `ibrg_llm/out/stats.txt`. Where this file's claims differ, the summary wins.
 
 ---
 
 ## 0. Where everything lives  (read first)
-- **GitHub (source of truth):** `github.com/nurkyzaz/AGI`, branch **`claude/agi-research-review-1244c8`**,
-  directory **`ibrg_llm/`**. The IB=RG work is on this branch, **not `main`**. Get it with:
-  `git clone https://github.com/nurkyzaz/AGI && cd AGI && git checkout claude/agi-research-review-1244c8`
+- **GitHub (source of truth):** `github.com/nurkyzaz/AGI`, branch **`main`**, directory **`ibrg_llm/`**.
+  Get it with: `git clone https://github.com/nurkyzaz/AGI`
 - **Code:** `ibrg_llm/*.py` (task/model/experiment modules — see §2 for what each does).
-- **Plan + log:** `ibrg_llm/HANDOFF.md` (this file) + `ibrg_llm/DECISIONS.md`.
-- **Results & figures:** `ibrg_llm/out/*.json` (per run) + `ibrg_llm/out/fig_*.png` — committed to the
-  branch; regenerate any figure with `python -m ibrg_llm.aggregate`.
+- **Plan + log:** `docs/planning/HANDOFF.md` (this file) + `docs/planning/DECISIONS.md`.
+- **Results & figures:** `ibrg_llm/out/*.json` (per run) + `ibrg_llm/out/fig_*.png` — committed to
+  `main`; regenerate any figure with `python -m ibrg_llm.aggregate`.
 - **Cluster working copy:** `gpus:~/agi/ibrg_llm/` is **loose scp'd files, NOT under git**. Treat
   GitHub as authoritative: `scp` code up before running, `scp` results back (results also live at
   `gpus:~/agi/ibrg_llm/out/`). The cluster `~/agi` is *not* a git repo.
@@ -93,7 +95,7 @@ between-model correlation into a de-confounded, causal claim.
 ## 4. PRUNED / abandoned (and why — don't redo these)
 - **Serialized-grid ARC task** (`step0.py`, `stimuli.py`, `colab_ibrg.py`): the 3B is behaviourally
   dead on text-serialized grids (exact=0, wellformed=0) → replaced by the text ICL task. Legacy, kept.
-- **Old causalarc GATE program / physics Phase-6 on grid CNNs** (`../causalarc`, `../MASTER_PLAN`):
+- **Old causalarc GATE program / physics Phase-6 on grid CNNs** (`causalarc/`, `docs/planning/MASTER_PLAN (1).md`):
   superseded by the LLM+VIB approach; GATE-1 v2 never landed. Historical only.
 - **Manifold curvature, multi-task-family, full-DAG/RSMI inside P1**: high cost, low marginal signal
   → deferred (variance + IB-relevance are the observational stats we keep).

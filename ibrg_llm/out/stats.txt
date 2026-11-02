@@ -1,0 +1,161 @@
+stats.py — all numbers from ibrg_llm/out/*.json (SD over seeds, ddof=1)
+0.5B: 5 files: shortcut_q05b_s0.json, shortcut_q05b_s1.json, shortcut_q05b_s2.json, shortcut_q05b_s3.json, shortcut_q05b_s4.json
+1.5B: 5 files: shortcut_q15b_s0.json, shortcut_q15b_s1.json, shortcut_q15b_s2.json, shortcut_q15b_s3.json, shortcut_q15b_s4.json
+3B: 5 files: shortcut_seed0.json, shortcut_seed1.json, shortcut_seed2.json, shortcut_seed3.json, shortcut_seed4.json
+
+========================================================================
+A1. Shortcut preference under conflict (0.5 = no preference; >0.5 = leans to shortcut)
+========================================================================
+n_behav = 160 conflict items per seed (runner.py default; all sbatch files use it)
+  0.5B  shortcut_pref  mean 0.552  SD 0.015  SE 0.007  (n=5)   per-seed: 0.562, 0.558, 0.526, 0.556, 0.558
+  1.5B  shortcut_pref  mean 0.501  SD 0.019  SE 0.008  (n=5)   per-seed: 0.485, 0.531, 0.495, 0.489, 0.506
+  3B    shortcut_pref  mean 0.491  SD 0.025  SE 0.011  (n=5)   per-seed: 0.503, 0.524, 0.461, 0.470, 0.495
+  0.5B  aligned_acc    mean 0.955  SD 0.033  SE 0.015  (n=5)
+  1.5B  aligned_acc    mean 1.000  SD 0.000  SE 0.000  (n=5)
+  3B    aligned_acc    mean 0.997  SD 0.006  SE 0.002  (n=5)
+  Welch t-test 0.5B vs 1.5B: t = 4.79, df = 7.6, p = 0.0016
+  Welch t-test 1.5B vs 3B: t = 0.77, df = 7.3, p = 0.4673
+  Welch t-test 0.5B vs 3B: t = 4.70, df = 6.4, p = 0.0028
+  one-sample t-test 0.5B vs 0.5: t = 7.89, df = 4, p = 0.0014
+  one-sample t-test 1.5B vs 0.5: t = 0.16, df = 4, p = 0.8832
+  one-sample t-test 3B vs 0.5: t = -0.84, df = 4, p = 0.4504
+
+========================================================================
+A2. Removing the shortcut (color) directions at one fixed layer (H4)
+========================================================================
+effect = base - ablated shortcut_pref (positive = less shortcut use after removal)
+  0.5B (ablation layer [12]):
+    shortcut-ablation effect  mean 0.003  SD 0.015  SE 0.007  (n=5)   per-seed: -0.003, +0.011, +0.023, -0.018, +0.003
+    random-ablation effect    mean 0.002  SD 0.008  SE 0.003  (n=5)   per-seed: +0.005, -0.002, +0.014, +0.002, -0.007
+    paired t-test shortcut vs random: t = 0.12, df = 4, p = 0.909; seeds with shortcut effect > 0: 3/5
+  1.5B (ablation layer [14]):
+    shortcut-ablation effect  mean -0.016  SD 0.031  SE 0.014  (n=5)   per-seed: +0.004, +0.009, +0.006, -0.055, -0.045
+    random-ablation effect    mean -0.000  SD 0.011  SE 0.005  (n=5)   per-seed: -0.015, +0.005, -0.002, +0.015, -0.005
+    paired t-test shortcut vs random: t = -0.94, df = 4, p = 0.400; seeds with shortcut effect > 0: 3/5
+  3B (ablation layer [18]):
+    shortcut-ablation effect  mean 0.018  SD 0.023  SE 0.010  (n=5)   per-seed: +0.032, -0.017, +0.043, +0.012, +0.020
+    random-ablation effect    mean 0.001  SD 0.003  SE 0.001  (n=5)   per-seed: +0.001, -0.000, +0.002, +0.005, -0.004
+    paired t-test shortcut vs random: t = 1.69, df = 4, p = 0.166; seeds with shortcut effect > 0: 4/5
+
+========================================================================
+A3. Layer sweep (abl_seed*.json, 3B)
+========================================================================
+files: abl_seed1.json, abl_seed3.json, abl_seed4.json  (n = 3 seeds)
+  seed 1: best layer 16 of 36; best-layer effect +0.062; one random direction at that layer -0.003
+  seed 3: best layer 26 of 36; best-layer effect +0.021; one random direction at that layer -0.000
+  seed 4: best layer 12 of 36; best-layer effect +0.050; one random direction at that layer -0.000
+  best-layer effect   mean 0.044  SD 0.021  SE 0.012  (n=3)
+  random-ctrl effect  mean -0.001  SD 0.002  SE 0.001  (n=3)
+  NOTE: best layer is picked as the max over 36 layers, then compared with ONE random
+  direction at that layer. Selecting the max inflates the shortcut effect (selection bias).
+
+========================================================================
+A4. Rule-vs-shortcut probe gap vs rule-following (E1)
+========================================================================
+x = max_layer(rule probe acc) - max_layer(shortcut probe acc); y = 1 - shortcut_pref
+  pooled: r = +0.68 (p = 0.005, n = 15)
+  within 0.5B: r = +0.25 (p = 0.683, n = 5)
+  within 1.5B: r = +0.32 (p = 0.604, n = 5)
+  within 3B: r = +0.08 (p = 0.897, n = 5)
+  within-model pooled (model means removed): r = +0.21 (n = 15, 3 means removed)
+
+========================================================================
+A5. Shortcut probe accuracy vs shortcut use (F1, 'monitor')
+========================================================================
+  pooled: r = -0.34 (p = 0.218, n = 15)
+  within 0.5B: r = -0.44 (p = 0.462, n = 5)
+  within 1.5B: r = -0.72 (p = 0.170, n = 5)
+  within 3B: r = -0.43 (p = 0.471, n = 5)
+  within-model pooled (model means removed): r = -0.47
+
+========================================================================
+B1. Boundary: cheap shortcut, compression vs intervention (boundary_seed*.json)
+========================================================================
+n = 8 seeds; n_classes = 4 -> chance = 0.25
+ condition = spurious
+  beta                     train_acc                  test_acc        shortcut_retention
+  0                 1.000 ± 0.000 SD          0.460 ± 0.146 SD          1.000 ± 0.000 SD
+  0.001             1.000 ± 0.000 SD          0.248 ± 0.009 SD          1.000 ± 0.000 SD
+  0.01              1.000 ± 0.000 SD          0.248 ± 0.009 SD          1.000 ± 0.000 SD
+  0.03              1.000 ± 0.000 SD          0.248 ± 0.009 SD          1.000 ± 0.000 SD
+  0.1               1.000 ± 0.000 SD          0.248 ± 0.009 SD          1.000 ± 0.000 SD
+  0.3               1.000 ± 0.000 SD          0.248 ± 0.009 SD          1.000 ± 0.000 SD
+  1                 0.603 ± 0.129 SD          0.261 ± 0.056 SD          1.000 ± 0.000 SD
+ condition = intervention
+  beta                     train_acc                  test_acc        shortcut_retention
+  0                 0.986 ± 0.019 SD          0.891 ± 0.093 SD          1.000 ± 0.000 SD
+  0.001             0.980 ± 0.022 SD          0.892 ± 0.092 SD          0.967 ± 0.045 SD
+  0.01              0.973 ± 0.029 SD          0.896 ± 0.088 SD          0.760 ± 0.108 SD
+  0.03              0.967 ± 0.033 SD          0.902 ± 0.083 SD          0.661 ± 0.075 SD
+  0.1               0.961 ± 0.040 SD          0.903 ± 0.085 SD          0.601 ± 0.069 SD
+  0.3               0.953 ± 0.047 SD          0.899 ± 0.090 SD          0.530 ± 0.051 SD
+  1                 0.291 ± 0.090 SD          0.284 ± 0.090 SD          0.396 ± 0.053 SD
+
+========================================================================
+B2. VIB: useless noise feature (vib_seed*.json)
+========================================================================
+n = 8 seeds; chance = 0.25
+  beta                      test_acc            nuisance_recon          causal_retention
+  0                 0.732 ± 0.059 SD          0.626 ± 0.027 SD          0.904 ± 0.072 SD
+  0.0001            0.723 ± 0.059 SD          0.567 ± 0.023 SD          0.885 ± 0.075 SD
+  0.0003            0.721 ± 0.060 SD          0.504 ± 0.023 SD          0.866 ± 0.071 SD
+  0.001             0.723 ± 0.068 SD          0.354 ± 0.018 SD          0.871 ± 0.069 SD
+  0.003             0.718 ± 0.069 SD          0.150 ± 0.020 SD          0.889 ± 0.070 SD
+  0.01              0.716 ± 0.070 SD          0.004 ± 0.005 SD          0.899 ± 0.075 SD
+  0.03              0.721 ± 0.070 SD         -0.007 ± 0.011 SD          0.899 ± 0.073 SD
+  0.1               0.702 ± 0.088 SD          0.002 ± 0.009 SD          0.869 ± 0.086 SD
+  0.3               0.643 ± 0.093 SD          0.004 ± 0.008 SD          0.797 ± 0.119 SD
+  1                 0.250 ± 0.003 SD         -0.004 ± 0.002 SD          0.824 ± 0.120 SD
+  best mean test_acc 0.732 at beta 0; at beta 0: 0.732
+
+========================================================================
+B3. Rule vs shortcut directions (crit_seed*.json)
+========================================================================
+n = 5 seeds
+ condition = aligned  (obs = read off training data; inv = predict across environments)
+  beta                    obs_causal              obs_spurious                   obs_auc
+  0                 1.000 ± 0.000 SD          1.000 ± 0.000 SD          0.483 ± 0.037 SD
+  0.001             0.975 ± 0.033 SD          1.000 ± 0.000 SD          0.367 ± 0.095 SD
+  0.003             0.978 ± 0.025 SD          1.000 ± 0.000 SD          0.367 ± 0.126 SD
+  0.01              0.988 ± 0.017 SD          1.000 ± 0.000 SD          0.383 ± 0.046 SD
+  0.03              0.963 ± 0.040 SD          1.000 ± 0.000 SD          0.317 ± 0.190 SD
+  0.1               0.975 ± 0.051 SD          1.000 ± 0.000 SD          0.333 ± 0.156 SD
+  0.3               0.980 ± 0.037 SD          1.000 ± 0.000 SD          0.400 ± 0.070 SD
+  1                 0.757 ± 0.099 SD          1.000 ± 0.001 SD          0.089 ± 0.091 SD
+  beta                    inv_causal              inv_spurious                   inv_auc
+  0                 0.826 ± 0.092 SD          0.731 ± 0.075 SD          0.719 ± 0.032 SD
+  0.001             0.604 ± 0.115 SD          0.505 ± 0.020 SD          0.714 ± 0.173 SD
+  0.003             0.619 ± 0.148 SD          0.503 ± 0.015 SD          0.717 ± 0.194 SD
+  0.01              0.596 ± 0.130 SD          0.511 ± 0.015 SD          0.697 ± 0.202 SD
+  0.03              0.549 ± 0.056 SD          0.508 ± 0.023 SD          0.592 ± 0.205 SD
+  0.1               0.556 ± 0.074 SD          0.507 ± 0.021 SD          0.733 ± 0.134 SD
+  0.3               0.535 ± 0.026 SD          0.514 ± 0.027 SD          0.578 ± 0.078 SD
+  1                 0.519 ± 0.050 SD          0.499 ± 0.027 SD          0.572 ± 0.160 SD
+ condition = recomb  (obs = read off training data; inv = predict across environments)
+  beta                    obs_causal              obs_spurious                   obs_auc
+  0                 0.976 ± 0.020 SD          0.868 ± 0.055 SD          0.822 ± 0.141 SD
+  0.001             0.979 ± 0.028 SD          0.831 ± 0.062 SD          0.906 ± 0.075 SD
+  0.003             0.985 ± 0.018 SD          0.901 ± 0.075 SD          0.844 ± 0.112 SD
+  0.01              0.983 ± 0.022 SD          0.935 ± 0.034 SD          0.617 ± 0.192 SD
+  0.03              0.984 ± 0.012 SD          0.981 ± 0.013 SD          0.536 ± 0.112 SD
+  0.1               0.985 ± 0.012 SD          0.960 ± 0.025 SD          0.750 ± 0.139 SD
+  0.3               0.984 ± 0.014 SD          0.965 ± 0.021 SD          0.639 ± 0.136 SD
+  1                 0.686 ± 0.127 SD          0.670 ± 0.128 SD          0.525 ± 0.223 SD
+  beta                    inv_causal              inv_spurious                   inv_auc
+  0                 0.958 ± 0.026 SD          0.790 ± 0.062 SD          0.856 ± 0.120 SD
+  0.001             0.956 ± 0.033 SD          0.762 ± 0.081 SD          0.906 ± 0.046 SD
+  0.003             0.958 ± 0.030 SD          0.835 ± 0.096 SD          0.864 ± 0.072 SD
+  0.01              0.950 ± 0.043 SD          0.889 ± 0.036 SD          0.706 ± 0.178 SD
+  0.03              0.955 ± 0.028 SD          0.937 ± 0.031 SD          0.631 ± 0.088 SD
+  0.1               0.963 ± 0.025 SD          0.919 ± 0.025 SD          0.744 ± 0.141 SD
+  0.3               0.961 ± 0.023 SD          0.934 ± 0.025 SD          0.583 ± 0.166 SD
+  1                 0.564 ± 0.092 SD          0.538 ± 0.052 SD          0.539 ± 0.185 SD
+  beta                       ood_acc
+  0                 0.909 ± 0.059 SD
+  0.001             0.909 ± 0.059 SD
+  0.003             0.911 ± 0.058 SD
+  0.01              0.914 ± 0.056 SD
+  0.03              0.919 ± 0.051 SD
+  0.1               0.922 ± 0.049 SD
+  0.3               0.918 ± 0.052 SD
+  1                 0.307 ± 0.109 SD

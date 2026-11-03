@@ -1,7 +1,7 @@
 # causalarc — Phase 0 harness
 
 The trustworthy instrument for *"Causally Useful Compression on ARC"*
-(see [`../COMPRESSION_INTELLIGENCE_RESEARCH_PLAN (1).md`](../COMPRESSION_INTELLIGENCE_RESEARCH_PLAN%20(1).md)).
+(see [`../docs/planning/MASTER_PLAN.md`](../docs/planning/MASTER_PLAN.md), which supersedes the original research plan).
 
 **Phase 0 = specification & audit.** Build a harness you can trust *before* you
 have any result to be excited about. This package implements the 5 planted

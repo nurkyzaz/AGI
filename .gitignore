@@ -22,3 +22,6 @@ data/
 # Nested project: cascadearc is its own git repo (competition solver),
 # versioned separately. Excluded here to avoid an embedded-repo gitlink.
 cascadearc/
+
+# Personal files and scratch logs kept beside the repo, never committed
+private/

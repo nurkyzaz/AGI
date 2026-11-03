@@ -1,6 +1,6 @@
 # HANDOFF — IB=RG on real systems: status + the single forward plan
 **The one plan for the next agent.** Raw chronological log: `DECISIONS.md`. Original motivation &
-prior program: `Intellectual Motivation.md`, `MASTER_PLAN (1).md`, `LITERATURE_REVIEW_*.md` (all in `docs/planning/`).
+prior program: `INTELLECTUAL_MOTIVATION.md`, `MASTER_PLAN.md`, `LITERATURE_REVIEW_*.md` (all in `docs/planning/`).
 
 > **Current status:** the honest summary of results is `ibrg_llm/APPLICATION_EXEC_SUMMARY.md`;
 > all its numbers come from `ibrg_llm/stats.py` → `ibrg_llm/out/stats.txt`. Where this file's claims differ, the summary wins.
@@ -95,7 +95,7 @@ between-model correlation into a de-confounded, causal claim.
 ## 4. PRUNED / abandoned (and why — don't redo these)
 - **Serialized-grid ARC task** (`step0.py`, `stimuli.py`, `colab_ibrg.py`): the 3B is behaviourally
   dead on text-serialized grids (exact=0, wellformed=0) → replaced by the text ICL task. Legacy, kept.
-- **Old causalarc GATE program / physics Phase-6 on grid CNNs** (`causalarc/`, `docs/planning/MASTER_PLAN (1).md`):
+- **Old causalarc GATE program / physics Phase-6 on grid CNNs** (`causalarc/`, `docs/planning/MASTER_PLAN.md`):
   superseded by the LLM+VIB approach; GATE-1 v2 never landed. Historical only.
 - **Manifold curvature, multi-task-family, full-DAG/RSMI inside P1**: high cost, low marginal signal
   → deferred (variance + IB-relevance are the observational stats we keep).

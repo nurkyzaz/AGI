@@ -157,4 +157,4 @@ plt.legend(fontsize=8); plt.tight_layout(); plt.savefig("selectivity.png", dpi=1
 json.dump({"behavioral": {"exact": ex/N_BEHAV, "cell": cells/N_BEHAV, "wellformed": wf/N_BEHAV},
            "causal": causal, "nuis": nuis, "causal_shuf": c_sh, "nuis_shuf": u_sh,
            "chance": {"causal": cch, "nuis": uch}}, open("results.json", "w"), indent=2)
-print("\nSaved selectivity.png + results.json  (download and send to Claude)")
+print("\nSaved selectivity.png + results.json")

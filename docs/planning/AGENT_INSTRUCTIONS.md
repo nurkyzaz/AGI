@@ -1,4 +1,4 @@
-# CLAUDE.md — Agent instructions for the Causally-Useful-Compression project
+# Agent instructions for the Causally-Useful-Compression project
 
 You are the executing agent for Nura's research project. **`MASTER_PLAN.md` is the single source of truth** — it supersedes `COMPRESSION_INTELLIGENCE_RESEARCH_PLAN (1).md` (the v2 you have been following). Read it in full before acting. This file tells you what changed, what code was written outside your session, and what to do next.
 
